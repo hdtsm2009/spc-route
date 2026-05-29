@@ -1,9 +1,10 @@
 """マスタJSONエクスポート。
 
-統合店舗マスタ_v2.csv → netlify/functions/generate_plan/stores.json
-設定.json            → netlify/functions/generate_plan/config.json
+統合店舗マスタ_v2.csv → api/stores.json
+設定.json            → api/config.json
 
-Netlify Functionのデプロイ前、またはマスタデータ更新後に実行してください。
+Vercel Functionのデプロイ前、またはマスタデータ更新後に実行してください。
+実行後は  git add api/ && git commit && git push  でVercelに自動デプロイされます。
 """
 import os
 import csv
@@ -15,9 +16,9 @@ sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="repla
 
 ROOT = r"G:\マイドライブ\作業フォルダ2025～\Claude作業フォルダ\Claudecode スポカフェ"
 BASE = os.path.join(ROOT, "訪問店舗提案サービス")
-OUT_DIR = os.path.join(BASE, "netlify", "functions", "generate_plan")
+OUT_DIR = os.path.join(BASE, "api")
 
-# 出力に含めるフィールド（Netlify Functionで使用するもののみ）
+# 出力に含めるフィールド（Vercel Functionで使用するもののみ）
 KEEP_FIELDS = [
     "店舗ID", "店名", "住所", "緯度", "経度",
     "業態ジャンル", "営業ランク", "営業スコア", "スコア理由", "除外理由",
