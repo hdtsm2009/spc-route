@@ -29,13 +29,17 @@ import urllib.parse
 import traceback
 import time
 import random
+import sys
+
+_DIR = os.path.dirname(os.path.abspath(__file__))
+# Vercel関数実行時、api/ が sys.path に無いため兄弟importが失敗する。明示追加。
+if _DIR not in sys.path:
+    sys.path.insert(0, _DIR)
 
 try:
     import _kv  # type: ignore
 except Exception:  # noqa: BLE001 - 兄弟import失敗時もHTMLフォールバックで動かす
     _kv = None
-
-_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # ─── データ読み込み（コールド起動後はキャッシュ）────────────────────────────
 _STORES = None

@@ -37,6 +37,18 @@ a:hover{text-decoration:underline}
   .gen-field select,.gen-field input{min-width:unset;width:100%}
   .gen-btn{width:100%}
 }
+/* 使い方ガイド */
+.guide{background:#fff;border:1px solid #dde;border-radius:8px;padding:0;margin-bottom:24px;
+       box-shadow:0 1px 4px rgba(0,0,0,.06);overflow:hidden}
+.guide>summary{cursor:pointer;list-style:none;padding:14px 20px;font-size:14px;font-weight:bold;
+               color:#2c3e50;background:#f8f9fb;user-select:none}
+.guide>summary::-webkit-details-marker{display:none}
+.guide>summary:hover{background:#eef1f6}
+.guide-body{padding:14px 22px 18px}
+.guide-ol{padding-left:20px;margin:0;font-size:13px}
+.guide-ol li{margin-bottom:10px;line-height:1.6}
+.guide-note{font-size:12px;color:#555;background:#f4f8fb;border-left:3px solid #aad4e8;
+            padding:8px 12px;border-radius:0 4px 4px 0;margin:12px 0 0}
 </style>
 </head>
 <body>
@@ -80,6 +92,30 @@ a:hover{text-decoration:underline}
   </div>
   <div class="gen-status" id="gen-status"></div>
 </div>
+
+<!-- ── 使い方ガイド（生成前に確認できるよう先頭付近に配置）── -->
+<details class="guide" open>
+  <summary>📖 使い方（クリックで開閉）</summary>
+  <div class="guide-body">
+    <ol class="guide-ol">
+      <li><strong>エリア・担当者・時間帯を選んで「🚀 生成」</strong><br>
+          その場で訪問プランを作成し、新しいタブで開きます（初回は10〜15秒かかる場合あり）。</li>
+      <li><strong>生成したプランは自動保存され、共有URLが発行されます</strong><br>
+          下の「📑 生成済みプラン」一覧からいつでも開けます（30日間保持）。URLを送れば他の人も同じプランを見られます。</li>
+      <li><strong>プラン画面では不要な店舗を「✕ 除外」できます</strong><br>
+          除外するとGoogle Mapsの周遊ルートからも自動で外れます。「🔄 ルート更新」で反映。</li>
+      <li><strong>「🗺 周遊ルート」ボタンでGoogle Mapsをワンタップ起動</strong><br>
+          スマホでもそのままナビに使えます。</li>
+    </ol>
+    <p class="guide-note">
+      💡 ランクの目安：<strong style="color:#e74c3c">S</strong>=最優先 ／
+      <strong style="color:#e67e22">A</strong>=高優先 ／
+      <strong style="color:#3498db">B</strong>=候補 ／
+      <strong style="color:#7f8c8d">C</strong>=低優先。
+      「両サービス未掲載」チップが付く店が狙い目です。
+    </p>
+  </div>
+</details>
 
 <!-- ── 既存プラン一覧（/api/plans から動的読み込み）── -->
 <h2 style="font-size:15px;color:#2c3e50;margin:0 0 10px">📑 生成済みプラン</h2>
