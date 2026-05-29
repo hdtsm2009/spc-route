@@ -1,0 +1,27 @@
+# 生成済みプランHTMLは除外（index.htmlは含める）
+_output/route_plans/訪問プラン_*.html
+_output/route_plans/週次プラン_*.html
+
+# アーカイブは除外
+_output/_archive/
+
+# 大容量CSVマスタ（ローカル専用）
+_output/統合店舗マスタ.csv
+_output/統合店舗マスタ_geocoded.csv
+_output/統合店舗マスタ_v2.csv
+
+# ジオコードキャッシュ
+_data/geocode_cache.json
+
+# 元データ（生データ）
+_data/raw/
+
+# Pythonキャッシュ
+__pycache__/
+*.pyc
+*.pyo
+
+# Windows / Mac
+Thumbs.db
+desktop.ini
+.DS_Store

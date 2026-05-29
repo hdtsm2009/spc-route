@@ -1,0 +1,12 @@
+[build]
+  publish = "_output/route_plans"
+  functions = "netlify/functions"
+
+[functions]
+  node_bundler = "esbuild"
+
+[functions."generate_plan"]
+  included_files = [
+    "netlify/functions/generate_plan/stores.json",
+    "netlify/functions/generate_plan/config.json"
+  ]
