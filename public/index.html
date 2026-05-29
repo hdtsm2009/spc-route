@@ -3,42 +3,76 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>訪問プラン 一覧</title>
+<title>訪問プラン 作成</title>
 <style>
 body{font-family:'Hiragino Sans','Meiryo',sans-serif;font-size:14px;margin:0;color:#333;background:#f5f6fa}
-.page-wrap{max-width:760px;margin:0 auto;padding:20px 16px}
+.page-wrap{max-width:820px;margin:0 auto;padding:20px 16px}
 h1{font-size:18px;margin-bottom:4px}
 .meta{color:#888;font-size:12px;margin-bottom:20px}
-table{border-collapse:collapse;width:100%}
-th{background:#2c3e50;color:#fff;padding:7px 12px;text-align:left;font-size:13px}
-td{padding:8px 12px;border-bottom:1px solid #eee;background:#fff}
-tr:hover td{background:#f8f9fa}
 a{color:#2980b9;text-decoration:none}
 a:hover{text-decoration:underline}
 .footer{margin-top:16px;color:#aaa;font-size:11px}
-/* 生成フォーム */
-.gen-panel{background:#fff;border:1px solid #dde;border-radius:8px;padding:18px 20px;
-           margin-bottom:24px;box-shadow:0 1px 4px rgba(0,0,0,.06)}
-.gen-panel h2{font-size:15px;margin:0 0 14px;color:#2c3e50}
+
+/* パネル共通 */
+.panel{background:#fff;border:1px solid #dde;border-radius:8px;padding:18px 20px;
+       margin-bottom:20px;box-shadow:0 1px 4px rgba(0,0,0,.06)}
+.panel h2{font-size:15px;margin:0 0 6px;color:#2c3e50}
+.panel .sub{font-size:12px;color:#888;margin:0 0 14px}
+.step-badge{display:inline-block;background:#2c3e50;color:#fff;border-radius:50%;
+            width:22px;height:22px;line-height:22px;text-align:center;font-size:13px;margin-right:6px}
+
+/* フォーム */
 .gen-row{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin-bottom:10px}
 .gen-field{display:flex;flex-direction:column;gap:4px}
 .gen-field label{font-size:11px;color:#666;font-weight:bold}
 .gen-field select,.gen-field input{padding:7px 10px;border:1px solid #ccc;border-radius:4px;
   font-size:13px;background:#fff;min-width:120px}
-.gen-btn{padding:9px 20px;background:#2c3e50;color:#fff;border:none;border-radius:4px;
-          font-size:13px;cursor:pointer;white-space:nowrap}
-.gen-btn:hover{background:#1a252f}
-.gen-btn:disabled{background:#aaa;cursor:not-allowed}
-.gen-status{font-size:12px;margin-top:8px;min-height:20px}
+.gen-field input.wide{min-width:260px}
+.preset-chips{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 12px}
+.chip{padding:5px 11px;background:#eef1f6;border:1px solid #d6dde8;border-radius:14px;
+      font-size:12px;cursor:pointer;color:#2c3e50}
+.chip:hover{background:#dde6f0}
+.btn{padding:9px 20px;color:#fff;border:none;border-radius:4px;font-size:13px;
+     cursor:pointer;white-space:nowrap}
+.btn-primary{background:#2c3e50}
+.btn-primary:hover{background:#1a252f}
+.btn-go{background:#27ae60}
+.btn-go:hover{background:#1e8c4f}
+.btn:disabled{background:#aaa;cursor:not-allowed}
+.gen-status{font-size:12px;margin-top:8px;min-height:18px}
 .gen-status.ok{color:#27ae60}
 .gen-status.err{color:#e74c3c}
-@media(max-width:480px){
-  .gen-row{flex-direction:column}
-  .gen-field select,.gen-field input{min-width:unset;width:100%}
-  .gen-btn{width:100%}
-}
+
+/* 任意アポ */
+.appt-box{border:1px dashed #cdd6e0;border-radius:6px;padding:0;margin-top:6px;overflow:hidden}
+.appt-box>summary{cursor:pointer;list-style:none;padding:10px 14px;font-size:12px;font-weight:bold;
+                  color:#2c3e50;background:#f8f9fb;user-select:none}
+.appt-box>summary::-webkit-details-marker{display:none}
+.appt-body{padding:12px 14px}
+
+/* 候補チェックリスト */
+#cand-panel{display:none}
+.cand-toolbar{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px}
+.cand-toolbar .tools a{font-size:12px;margin-right:12px;cursor:pointer}
+.cand-count{font-size:12px;color:#666}
+.cand-list{max-height:420px;overflow:auto;border:1px solid #eee;border-radius:6px}
+.cand-item{display:flex;gap:10px;padding:9px 12px;border-bottom:1px solid #f0f0f0;align-items:flex-start}
+.cand-item:hover{background:#f8f9fa}
+.cand-item input{margin-top:3px;transform:scale(1.2)}
+.cand-main{flex:1;min-width:0}
+.cand-name{font-weight:bold;font-size:13px}
+.cand-tags{margin:3px 0}
+.tag{display:inline-block;font-size:11px;padding:1px 7px;border-radius:10px;margin-right:5px}
+.rank-S{background:#fde8e8;color:#e74c3c}.rank-A{background:#fdf0e3;color:#e67e22}
+.rank-B{background:#e8f2fb;color:#3498db}.rank-C{background:#eef0f1;color:#7f8c8d}
+.tag-genre{background:#eef1f6;color:#566}
+.tag-chain{background:#f3e8fb;color:#8e44ad}
+.tag-dist{background:#eafaf1;color:#27ae60}
+.cand-pitch{font-size:12px;color:#555;line-height:1.5}
+.cand-score{font-size:11px;color:#999}
+
 /* 使い方ガイド */
-.guide{background:#fff;border:1px solid #dde;border-radius:8px;padding:0;margin-bottom:24px;
+.guide{background:#fff;border:1px solid #dde;border-radius:8px;padding:0;margin-bottom:20px;
        box-shadow:0 1px 4px rgba(0,0,0,.06);overflow:hidden}
 .guide>summary{cursor:pointer;list-style:none;padding:14px 20px;font-size:14px;font-weight:bold;
                color:#2c3e50;background:#f8f9fb;user-select:none}
@@ -49,35 +83,72 @@ a:hover{text-decoration:underline}
 .guide-ol li{margin-bottom:10px;line-height:1.6}
 .guide-note{font-size:12px;color:#555;background:#f4f8fb;border-left:3px solid #aad4e8;
             padding:8px 12px;border-radius:0 4px 4px 0;margin:12px 0 0}
+.guide-link{font-size:13px;display:inline-block;margin-top:10px}
+
+/* プラン一覧 */
+table{border-collapse:collapse;width:100%}
+th{background:#2c3e50;color:#fff;padding:7px 12px;text-align:left;font-size:13px}
+td{padding:8px 12px;border-bottom:1px solid #eee;background:#fff}
+tr:hover td{background:#f8f9fa}
+
+@media(max-width:480px){
+  .gen-row{flex-direction:column;align-items:stretch}
+  .gen-field select,.gen-field input,.gen-field input.wide{min-width:unset;width:100%}
+  .btn{width:100%}
+}
 </style>
 </head>
 <body>
 <div class="page-wrap">
-<h1>📋 訪問プラン 一覧</h1>
-<p class="meta">最終更新: 2026-05-29 18:33</p>
+<h1>📋 訪問プラン 作成</h1>
+<p class="meta">2ステップで「行く店」を選び、最適な周遊ルートを作成します。</p>
 
-<!-- ── プラン生成フォーム ── -->
-<div class="gen-panel">
-  <h2>🚀 プランをその場で生成</h2>
+<!-- ── 使い方ガイド ── -->
+<details class="guide" open>
+  <summary>📖 使い方（クリックで開閉）</summary>
+  <div class="guide-body">
+    <ol class="guide-ol">
+      <li><strong>① 起点・時間帯を決めて「候補を検索」</strong><br>
+          エリアのチップを押すか、駅名・住所・店名を自由入力できます。
+          すでに行く予定の場所（アポ）があれば任意で指定でき、その周辺で候補を探せます。</li>
+      <li><strong>② 出てきた候補から「行く店」にチェック</strong><br>
+          ランク・スコア・距離・営業状況を見ながら選びます（上位は自動でチェック済み）。</li>
+      <li><strong>③ 「選んだ店でルート作成」</strong><br>
+          選んだ店を一筆書きに近い順番に並べ替え、共有URL付きのプランを新しいタブで開きます。</li>
+      <li><strong>プラン画面では不要な店を「✕ 除外」でき、「🗺 周遊ルート」でGoogleマップをワンタップ起動</strong>。
+          スマホでもそのままナビに使えます。</li>
+    </ol>
+    <p class="guide-note">
+      💡 ランクの目安：<strong style="color:#e74c3c">S</strong>=最優先 ／
+      <strong style="color:#e67e22">A</strong>=高優先 ／
+      <strong style="color:#3498db">B</strong>=候補 ／
+      <strong style="color:#7f8c8d">C</strong>=低優先。
+      「両サービス未掲載」の店が狙い目です。
+    </p>
+    <a class="guide-link" href="/guide.html" target="_blank">▶ 仕組み・店舗選定基準・ルート算出ロジックの詳しい解説はこちら</a>
+  </div>
+</details>
+
+<!-- ── STEP 1: 起点と条件 ── -->
+<div class="panel">
+  <h2><span class="step-badge">1</span>起点と時間帯を決める</h2>
+  <p class="sub">エリアのチップを押すか、駅名・住所・店名を自由に入力できます。</p>
+
+  <div class="preset-chips" id="preset-chips"></div>
+
   <div class="gen-row">
-    <div class="gen-field">
-      <label>エリア</label>
-      <select id="gen-area">
-        <option value="">選択してください</option>
-        <option value="西日暮里エリア">西日暮里エリア (西日暮里駅)</option>
-<option value="難波エリア">難波エリア (難波駅)</option>
-<option value="渋谷エリア">渋谷エリア (渋谷駅)</option>
-<option value="新宿エリア">新宿エリア (新宿駅)</option>
-<option value="池袋エリア">池袋エリア (池袋駅)</option>
-<option value="梅田エリア">梅田エリア (梅田駅)</option>
-      </select>
+    <div class="gen-field" style="flex:1">
+      <label>起点（駅名・住所・店名など）</label>
+      <input type="text" id="gen-origin" class="wide" placeholder="例: 西日暮里駅 / 渋谷区道玄坂2丁目 / ○○店">
     </div>
+  </div>
+  <div class="gen-row">
     <div class="gen-field">
       <label>担当者</label>
       <select id="gen-owner">
         <option value="鈴村">鈴村</option>
-<option value="鈴木">鈴木</option>
-<option value="その他">その他</option>
+        <option value="鈴木">鈴木</option>
+        <option value="その他">その他</option>
       </select>
     </div>
     <div class="gen-field">
@@ -88,123 +159,270 @@ a:hover{text-decoration:underline}
       <label>終了時刻</label>
       <input type="time" id="gen-end" value="21:00">
     </div>
-    <button class="gen-btn" id="gen-btn" onclick="generatePlan()">🚀 生成</button>
+    <div class="gen-field">
+      <label>抽出半径</label>
+      <select id="gen-radius">
+        <option value="">自動</option>
+        <option value="800">800m</option>
+        <option value="1200">1200m</option>
+        <option value="1600">1600m</option>
+        <option value="2000">2000m</option>
+      </select>
+    </div>
   </div>
-  <div class="gen-status" id="gen-status"></div>
+
+  <!-- 任意：確定アポ -->
+  <details class="appt-box" id="appt-box">
+    <summary>📌 すでに行く場所が決まっている（任意）</summary>
+    <div class="appt-body">
+      <p class="sub" style="margin:0 0 10px">
+        アポ・確定訪問先を入れると、その周辺で候補を探します。
+        時刻を入れると「アポの前後」に分けてルートを組みます（時刻は任意）。</p>
+      <div class="gen-row">
+        <div class="gen-field" style="flex:1">
+          <label>アポの場所（住所・駅名・店名）</label>
+          <input type="text" id="appt-origin" class="wide" placeholder="例: ○○ビル / △△駅">
+        </div>
+      </div>
+      <div class="gen-row">
+        <div class="gen-field">
+          <label>アポ開始（任意）</label>
+          <input type="time" id="appt-start">
+        </div>
+        <div class="gen-field">
+          <label>アポ終了（任意）</label>
+          <input type="time" id="appt-end">
+        </div>
+      </div>
+    </div>
+  </details>
+
+  <div style="margin-top:12px">
+    <button class="btn btn-primary" id="search-btn" onclick="searchCandidates()">🔍 候補を検索</button>
+  </div>
+  <div class="gen-status" id="search-status"></div>
 </div>
 
-<!-- ── 使い方ガイド（生成前に確認できるよう先頭付近に配置）── -->
-<details class="guide" open>
-  <summary>📖 使い方（クリックで開閉）</summary>
-  <div class="guide-body">
-    <ol class="guide-ol">
-      <li><strong>エリア・担当者・時間帯を選んで「🚀 生成」</strong><br>
-          その場で訪問プランを作成し、新しいタブで開きます（初回は10〜15秒かかる場合あり）。</li>
-      <li><strong>生成したプランは自動保存され、共有URLが発行されます</strong><br>
-          下の「📑 生成済みプラン」一覧からいつでも開けます（30日間保持）。URLを送れば他の人も同じプランを見られます。</li>
-      <li><strong>プラン画面では不要な店舗を「✕ 除外」できます</strong><br>
-          除外するとGoogle Mapsの周遊ルートからも自動で外れます。「🔄 ルート更新」で反映。</li>
-      <li><strong>「🗺 周遊ルート」ボタンでGoogle Mapsをワンタップ起動</strong><br>
-          スマホでもそのままナビに使えます。</li>
-    </ol>
-    <p class="guide-note">
-      💡 ランクの目安：<strong style="color:#e74c3c">S</strong>=最優先 ／
-      <strong style="color:#e67e22">A</strong>=高優先 ／
-      <strong style="color:#3498db">B</strong>=候補 ／
-      <strong style="color:#7f8c8d">C</strong>=低優先。
-      「両サービス未掲載」チップが付く店が狙い目です。
-    </p>
+<!-- ── STEP 2: 候補チェックリスト ── -->
+<div class="panel" id="cand-panel">
+  <h2><span class="step-badge">2</span>行く店を選ぶ</h2>
+  <p class="sub" id="cand-origin-note"></p>
+  <div class="cand-toolbar">
+    <div class="tools">
+      <a onclick="selectAll(true)">すべて選択</a>
+      <a onclick="selectAll(false)">すべて解除</a>
+    </div>
+    <span class="cand-count" id="cand-count"></span>
   </div>
-</details>
+  <div class="cand-list" id="cand-list"></div>
+  <div style="margin-top:14px">
+    <button class="btn btn-go" id="route-btn" onclick="generatePlan()">🗺 選んだ店でルート作成</button>
+  </div>
+  <div class="gen-status" id="route-status"></div>
+</div>
 
-<!-- ── 既存プラン一覧（/api/plans から動的読み込み）── -->
+<!-- ── 生成済みプラン一覧 ── -->
 <h2 style="font-size:15px;color:#2c3e50;margin:0 0 10px">📑 生成済みプラン</h2>
 <div id="plan-list-wrap">
   <p id="plan-list-loading" style="color:#888;font-size:13px">読み込み中...</p>
   <table id="plan-list-table" style="display:none">
-    <thead><tr><th>エリア / 担当</th><th>件数</th><th>生成日時</th></tr></thead>
+    <thead><tr><th>起点 / 担当</th><th>件数</th><th>生成日時</th></tr></thead>
     <tbody id="plan-list-body"></tbody>
   </table>
   <p id="plan-list-empty" style="display:none;color:#888;font-size:13px;padding:14px 0">
-    まだ保存されたプランはありません。上のフォームから生成すると、ここに一覧表示されます。
+    まだ保存されたプランはありません。上のフォームから作成すると、ここに一覧表示されます。
   </p>
 </div>
 <p class="footer">プランは生成時に自動保存され、30日間共有URLで閲覧できます。</p>
 </div>
 
 <script>
-async function generatePlan(){
-  const area  = document.getElementById('gen-area').value;
-  const owner = document.getElementById('gen-owner').value;
-  const start = document.getElementById('gen-start').value;
-  const end   = document.getElementById('gen-end').value;
-  const status = document.getElementById('gen-status');
-  const btn    = document.getElementById('gen-btn');
+// エリアプリセット（チップ → 起点欄に流し込む）
+const PRESETS = [
+  {label:'西日暮里', q:'西日暮里駅'},
+  {label:'難波',     q:'難波駅'},
+  {label:'渋谷',     q:'渋谷駅'},
+  {label:'新宿',     q:'新宿駅'},
+  {label:'池袋',     q:'池袋駅'},
+  {label:'梅田',     q:'梅田駅'},
+];
 
-  if(!area){ status.className='gen-status err'; status.textContent='⚠ エリアを選択してください'; return; }
-
-  btn.disabled = true;
-  btn.textContent = '⏳ 生成中...';
-  status.className = 'gen-status';
-  status.textContent = 'プランを生成しています（初回は10〜15秒かかる場合があります）...';
-
-  try{
-    const res = await fetch('/api/generate_plan', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({area, owner, window_start: start, window_end: end})
-    });
-    if(!res.ok){
-      const msg = await res.text();
-      throw new Error(msg);
-    }
-    const ctype = res.headers.get('Content-Type') || '';
-    if(ctype.includes('application/json')){
-      // 保存済み → パーマリンクを新タブで開き、一覧を更新
-      const data = await res.json();
-      window.open(data.permalink, '_blank');
-      status.className = 'gen-status ok';
-      status.textContent = '✅ 生成・保存完了！新しいタブで開きました（共有URLあり）。';
-      loadPlanList();
-    } else {
-      // KV未設定のフォールバック → blobで開く（保存なし）
-      const html = await res.text();
-      const blob = new Blob([html], {type: 'text/html; charset=utf-8'});
-      window.open(URL.createObjectURL(blob), '_blank');
-      status.className = 'gen-status ok';
-      status.textContent = '✅ 生成完了！新しいタブで開きました（※保存は無効）。';
-    }
-  } catch(e){
-    status.className = 'gen-status err';
-    status.textContent = '❌ エラー: ' + e.message;
-  } finally{
-    btn.disabled = false;
-    btn.textContent = '🚀 生成';
-  }
-}
+let LAST_ORIGIN = null;     // {lat,lng,title,source}
+let LAST_CANDIDATES = [];   // 検索結果
 
 function esc(s){
   return String(s == null ? '' : s).replace(/[&<>"]/g, c =>
     ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 }
 
+function renderPresets(){
+  document.getElementById('preset-chips').innerHTML =
+    PRESETS.map(p => `<span class="chip" onclick="setOrigin('${esc(p.q)}')">${esc(p.label)}</span>`).join('');
+}
+function setOrigin(q){ document.getElementById('gen-origin').value = q; }
+
+function apptPayload(){
+  const a = document.getElementById('appt-origin').value.trim();
+  if(!a) return null;
+  return {
+    origin_text: a,
+    time_start: document.getElementById('appt-start').value || '',
+    time_end:   document.getElementById('appt-end').value || '',
+  };
+}
+
+// ── STEP 1: 候補検索 ──
+async function searchCandidates(){
+  const origin = document.getElementById('gen-origin').value.trim();
+  const status = document.getElementById('search-status');
+  const btn    = document.getElementById('search-btn');
+  if(!origin){ status.className='gen-status err'; status.textContent='⚠ 起点を入力してください（チップを押すか自由入力）'; return; }
+
+  btn.disabled = true; btn.textContent = '⏳ 検索中...';
+  status.className = 'gen-status'; status.textContent = '候補を検索しています...';
+
+  const radius = document.getElementById('gen-radius').value;
+  const payload = {
+    origin_text: origin,
+    window_start: document.getElementById('gen-start').value,
+    window_end:   document.getElementById('gen-end').value,
+    limit: 60,
+  };
+  if(radius) payload.radius_m = parseInt(radius, 10);
+
+  try{
+    const res = await fetch('/api/candidates', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(payload)
+    });
+    if(!res.ok){ throw new Error(await res.text()); }
+    const data = await res.json();
+    LAST_ORIGIN = data.origin;
+    LAST_CANDIDATES = data.candidates || [];
+    renderCandidates();
+    status.className = 'gen-status ok';
+    status.textContent = `✅ ${data.count}件の候補が見つかりました。行く店を選んでください。`;
+    document.getElementById('cand-panel').scrollIntoView({behavior:'smooth', block:'start'});
+  } catch(e){
+    status.className = 'gen-status err';
+    status.textContent = '❌ エラー: ' + e.message;
+  } finally{
+    btn.disabled = false; btn.textContent = '🔍 候補を検索';
+  }
+}
+
+function renderCandidates(){
+  const panel = document.getElementById('cand-panel');
+  const list  = document.getElementById('cand-list');
+  const note  = document.getElementById('cand-origin-note');
+  if(LAST_ORIGIN){
+    const srcLabel = {preset:'エリア',store:'店舗',geocode:'住所/駅',latlng:'座標'}[LAST_ORIGIN.source] || '';
+    note.textContent = `起点: ${LAST_ORIGIN.title}${srcLabel ? '（'+srcLabel+'）' : ''}`;
+  }
+  if(LAST_CANDIDATES.length === 0){
+    list.innerHTML = '<p style="padding:14px;color:#888">条件に合う候補が見つかりませんでした。半径を広げるか、時間帯・起点を変えてお試しください。</p>';
+    panel.style.display = '';
+    updateCount();
+    return;
+  }
+  list.innerHTML = LAST_CANDIDATES.map((c, i) => {
+    const checked = i < 8 ? 'checked' : '';   // 上位8件は自動チェック
+    const rank = (c.rank || '').toString().charAt(0).toUpperCase();
+    const rankTag = rank ? `<span class="tag rank-${esc(rank)}">${esc(c.rank)}</span>` : '';
+    const genreTag = c.genre ? `<span class="tag tag-genre">${esc(c.genre)}</span>` : '';
+    const distTag = c.dist_m ? `<span class="tag tag-dist">${Math.round(c.dist_m)}m</span>` : '';
+    const chainTag = c.chain ? `<span class="tag tag-chain">チェーン疑</span>` : '';
+    const open = c.open_status ? `<span class="cand-score">／ ${esc(c.open_status)}</span>` : '';
+    return `
+      <label class="cand-item">
+        <input type="checkbox" data-id="${esc(c.id)}" ${checked}>
+        <span class="cand-main">
+          <span class="cand-name">${esc(c.name)}</span>
+          <span class="cand-tags">${rankTag}${genreTag}${distTag}${chainTag}</span>
+          <span class="cand-pitch">${esc(c.pitch || '')}</span>
+          <span class="cand-score">スコア ${esc(c.score)}${c.score_reason ? '（'+esc(c.score_reason)+'）' : ''} ${open}</span>
+        </span>
+      </label>`;
+  }).join('');
+  panel.style.display = '';
+  list.querySelectorAll('input[type=checkbox]').forEach(cb => cb.addEventListener('change', updateCount));
+  updateCount();
+}
+
+function selectAll(on){
+  document.querySelectorAll('#cand-list input[type=checkbox]').forEach(cb => cb.checked = on);
+  updateCount();
+}
+function selectedIds(){
+  return Array.from(document.querySelectorAll('#cand-list input[type=checkbox]:checked'))
+    .map(cb => cb.dataset.id);
+}
+function updateCount(){
+  document.getElementById('cand-count').textContent = `選択中: ${selectedIds().length}件`;
+}
+
+// ── STEP 2: ルート作成 ──
+async function generatePlan(){
+  const ids    = selectedIds();
+  const status = document.getElementById('route-status');
+  const btn    = document.getElementById('route-btn');
+  if(ids.length === 0){ status.className='gen-status err'; status.textContent='⚠ 行く店を1件以上選んでください'; return; }
+
+  btn.disabled = true; btn.textContent = '⏳ 作成中...';
+  status.className = 'gen-status'; status.textContent = 'ルートを最適化しています...';
+
+  const payload = {
+    store_ids: ids,
+    owner: document.getElementById('gen-owner').value,
+    window_start: document.getElementById('gen-start').value,
+    window_end:   document.getElementById('gen-end').value,
+  };
+  if(LAST_ORIGIN){ payload.lat = LAST_ORIGIN.lat; payload.lng = LAST_ORIGIN.lng;
+                   payload.origin_text = LAST_ORIGIN.title; }
+  else { payload.origin_text = document.getElementById('gen-origin').value.trim(); }
+  const appt = apptPayload();
+  if(appt) payload.appt = appt;
+
+  try{
+    const res = await fetch('/api/generate_plan', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(payload)
+    });
+    if(!res.ok){ throw new Error(await res.text()); }
+    const ctype = res.headers.get('Content-Type') || '';
+    if(ctype.includes('application/json')){
+      const data = await res.json();
+      window.open(data.permalink, '_blank');
+      status.className = 'gen-status ok';
+      status.textContent = '✅ 作成・保存完了！新しいタブで開きました（共有URLあり）。';
+      loadPlanList();
+    } else {
+      const html = await res.text();
+      const blob = new Blob([html], {type:'text/html; charset=utf-8'});
+      window.open(URL.createObjectURL(blob), '_blank');
+      status.className = 'gen-status ok';
+      status.textContent = '✅ 作成完了！新しいタブで開きました（※保存は無効）。';
+    }
+  } catch(e){
+    status.className = 'gen-status err';
+    status.textContent = '❌ エラー: ' + e.message;
+  } finally{
+    btn.disabled = false; btn.textContent = '🗺 選んだ店でルート作成';
+  }
+}
+
+// ── 生成済みプラン一覧 ──
 async function loadPlanList(){
   const loading = document.getElementById('plan-list-loading');
   const table   = document.getElementById('plan-list-table');
   const body    = document.getElementById('plan-list-body');
   const empty   = document.getElementById('plan-list-empty');
-  loading.style.display = '';
-  table.style.display = 'none';
-  empty.style.display = 'none';
+  loading.style.display = ''; table.style.display = 'none'; empty.style.display = 'none';
   try{
-    const res  = await fetch('/api/plans', {cache: 'no-store'});
+    const res  = await fetch('/api/plans', {cache:'no-store'});
     const data = await res.json();
     const plans = data.plans || [];
-    if(plans.length === 0){
-      loading.style.display = 'none';
-      empty.style.display = '';
-      return;
-    }
+    if(plans.length === 0){ loading.style.display='none'; empty.style.display=''; return; }
     body.innerHTML = plans.map(p => `
       <tr>
         <td><a href="/api/plan?id=${encodeURIComponent(p.id)}" target="_blank">${esc(p.area)}</a>
@@ -212,14 +430,16 @@ async function loadPlanList(){
         <td style="white-space:nowrap">${esc(p.count)}件</td>
         <td style="color:#888;font-size:12px;white-space:nowrap">${esc(p.created)}</td>
       </tr>`).join('');
-    loading.style.display = 'none';
-    table.style.display = '';
+    loading.style.display = 'none'; table.style.display = '';
   } catch(e){
     loading.textContent = '一覧の読み込みに失敗しました。';
   }
 }
 
-document.addEventListener('DOMContentLoaded', loadPlanList);
+document.addEventListener('DOMContentLoaded', () => {
+  renderPresets();
+  loadPlanList();
+});
 </script>
 </body>
 </html>

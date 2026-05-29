@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>仕組みと選定基準 — 訪問プラン作成ツール</title>
+<style>
+body{font-family:'Hiragino Sans','Meiryo',sans-serif;font-size:14px;line-height:1.75;margin:0;color:#333;background:#f5f6fa}
+.wrap{max-width:780px;margin:0 auto;padding:24px 18px 60px}
+h1{font-size:20px;margin:0 0 4px}
+.lead{color:#666;font-size:13px;margin:0 0 24px}
+.back{font-size:13px;display:inline-block;margin-bottom:18px}
+a{color:#2980b9;text-decoration:none}a:hover{text-decoration:underline}
+section{background:#fff;border:1px solid #dde;border-radius:8px;padding:20px 24px;
+        margin-bottom:18px;box-shadow:0 1px 4px rgba(0,0,0,.05)}
+h2{font-size:16px;color:#2c3e50;margin:0 0 12px;border-bottom:2px solid #eef1f6;padding-bottom:6px}
+h3{font-size:14px;color:#34495e;margin:18px 0 6px}
+p{margin:0 0 10px}
+ul,ol{margin:0 0 10px;padding-left:22px}
+li{margin-bottom:6px}
+code{background:#f1f3f7;padding:1px 6px;border-radius:4px;font-size:12px;color:#c0392b}
+.note{font-size:12.5px;color:#555;background:#f4f8fb;border-left:3px solid #aad4e8;
+      padding:10px 14px;border-radius:0 4px 4px 0;margin:12px 0}
+.flow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:14px 0;font-size:13px}
+.flow .box{background:#eef1f6;border:1px solid #d6dde8;border-radius:6px;padding:8px 12px}
+.flow .arrow{color:#888}
+table{border-collapse:collapse;width:100%;font-size:13px;margin:10px 0}
+th{background:#2c3e50;color:#fff;padding:7px 10px;text-align:left}
+td{padding:7px 10px;border-bottom:1px solid #eee}
+.tag{display:inline-block;font-size:11px;padding:1px 8px;border-radius:10px}
+.rank-S{background:#fde8e8;color:#e74c3c}.rank-A{background:#fdf0e3;color:#e67e22}
+.rank-B{background:#e8f2fb;color:#3498db}.rank-C{background:#eef0f1;color:#7f8c8d}
+.badge{background:#eaf6fb;color:#1a6a8a;font-size:11px;padding:1px 7px;border-radius:8px;border:1px solid #aad4e8}
+.diagram{font-family:monospace;font-size:12px;background:#fafbfc;border:1px solid #eee;
+         border-radius:6px;padding:12px 14px;white-space:pre;overflow-x:auto;color:#444}
+</style>
+</head>
+<body>
+<div class="wrap">
+<a class="back" href="/">← プラン作成画面に戻る</a>
+<h1>🔧 仕組みと店舗選定基準</h1>
+<p class="lead">このツールが「どんな店を、どういう基準で、どの順番で回るか」をどう決めているかの解説です。</p>
+
+<!-- 全体の流れ -->
+<section>
+  <h2>全体の流れ（2ステップ）</h2>
+  <div class="flow">
+    <span class="box">① 起点・時間帯を指定</span><span class="arrow">→</span>
+    <span class="box">候補を検索・スコア順に提示</span><span class="arrow">→</span>
+    <span class="box">② 行く店をチェック</span><span class="arrow">→</span>
+    <span class="box">巡回順を最適化</span><span class="arrow">→</span>
+    <span class="box">Googleマップ用ルート発行</span>
+  </div>
+  <p>「どの店に行くか（選定）」と「どう回るか（順番）」を分けているのがポイントです。
+     担当者がスコアを見ながら自分で行く店を取捨選択でき、選んだ後の並べ替えは機械が最短に近い順で行います。</p>
+  <p>起点は <strong>エリアチップ</strong>・<strong>駅名/住所の自由入力</strong>・<strong>店名</strong> のいずれでも指定でき、
+     「すでに行く予定のアポ地点」を起点周辺の中心に据えることもできます。</p>
+</section>
+
+<!-- 候補の抽出 -->
+<section>
+  <h2>① どの店を「候補」として出すか</h2>
+  <p>起点の座標から半径内（既定 約1,200m、変更可）にある店舗のうち、次の条件をすべて満たすものだけを候補にします。</p>
+  <ul>
+    <li><strong>営業対象から除外されていない</strong>（過去のNG・取引不可フラグが立っていない）</li>
+    <li><strong>スポカフェに未掲載</strong>（すでに掲載済みの店は営業先にならないため除外）</li>
+    <li><strong>座標があり、ジオコーディング品質が一定以上</strong>（地図がずれる低品質データは除外）</li>
+    <li><strong>指定時間帯に営業している可能性がある</strong>（営業時間情報から判定。定休・閉店明記は除外、不明は「要確認」として残す）</li>
+  </ul>
+  <div class="note">💡 営業時間が不明な店は切り捨てず「🟡 要確認」として残します。
+       現場で電話確認する前提で、機会損失を避けるためです。</div>
+</section>
+
+<!-- スコアとランク -->
+<section>
+  <h2>② どの店を「おすすめ」するか（スコアとランク）</h2>
+  <p>候補は<strong>営業スコアの高い順</strong>（同点なら起点に近い順）に並びます。スコアは事前計算された営業ランクに基づきます。</p>
+  <table>
+    <thead><tr><th>ランク</th><th>意味</th><th>目安スコア</th></tr></thead>
+    <tbody>
+      <tr><td><span class="tag rank-S">S</span></td><td>最優先ターゲット</td><td>70</td></tr>
+      <tr><td><span class="tag rank-A">A</span></td><td>高優先</td><td>50</td></tr>
+      <tr><td><span class="tag rank-B">B</span></td><td>候補</td><td>30</td></tr>
+      <tr><td><span class="tag rank-C">C</span></td><td>低優先</td><td>10</td></tr>
+    </tbody>
+  </table>
+  <p>各店には「なぜおすすめか」を示す<strong>ひとことピッチ</strong>が付きます。判定の優先順位は次の通りです。</p>
+  <ol>
+    <li><span class="badge">両サービス未掲載</span> … スポカフェ・ファンスタ両方に未掲載で、かつS/Aランク。<strong>最優先の狙い目</strong></li>
+    <li><strong>スポーツバー◎ / ダーツバー◎</strong> … 業態的に相性が良い</li>
+    <li><strong>2サービス未掲載</strong> … 両方未掲載（ランク問わず）</li>
+    <li><strong>ダーツライブ掲載</strong> … 外部ソースでスポーツ関連が確認できる</li>
+    <li><strong>スポカフェ未掲載 / ファンスタ未掲載</strong> … 片方のみ未掲載</li>
+    <li><strong>評価◯★ / Sランク店</strong> … 口コミ評価が高い、または高ランク</li>
+  </ol>
+  <div class="note">💡 「両サービス未掲載」チップが最有力。競合サービスにも載っておらず、こちらが先に押さえられる店です。</div>
+</section>
+
+<!-- ルート最適化 -->
+<section>
+  <h2>③ 選んだ店をどう「回る順番」にするか</h2>
+  <p>行く店を選んだ後、機械が地理的に<strong>一筆書きに近い順番</strong>へ並べ替えます。2段階のアルゴリズムを使います。</p>
+  <h3>1. 最近傍法（Nearest Neighbor）で初期順を作る</h3>
+  <p>起点から「いちばん近い未訪問店」へ、さらにそこから「次に近い店」へ…と貪欲に繋いで、ひとまずの巡回順を作ります。</p>
+  <h3>2. 2-opt で交差をほどく</h3>
+  <p>初期順は所々で経路が交差（＝行ったり来たり）します。2-optは経路の一部区間を反転して総距離が縮むなら採用、を繰り返し、交差を解消します。</p>
+  <div class="diagram">最近傍だけ:  起点 ─ A ╲   ╱ C        2-opt後:  起点 ─ A ─ B ─ C ─ D
+                       ╲ ╳ ╱                          （交差なし・総距離が短い）
+                        B   D  ← 交差して戻っている</div>
+  <p>この並べ替えにより、実測で<strong>歩行距離が大きく短縮</strong>されます（テストケースで約6割減）。
+     「起点に戻る」を指定した場合は、最後に起点へ戻る閉ループとして最適化します。</p>
+  <div class="note">💡 Googleマップ側でも経路は微調整されますが、<strong>訪問する順番そのもの</strong>をこのツールが最適化して渡すため、
+       マップ任せより行ったり来たりが減ります。</div>
+</section>
+
+<!-- アポ起点 -->
+<section>
+  <h2>④ 「すでに行く場所が決まっている」場合</h2>
+  <p>アポ・確定訪問先を指定すると、その地点を中心に候補を探します。アポに<strong>時刻</strong>を入れると、ルートを次のように組みます。</p>
+  <ul>
+    <li><strong>アポ前</strong>：開始時刻からアポ時刻までに無理なく寄れる店を、移動時間の余裕（バッファ）を見て配置</li>
+    <li><strong>アポ</strong>：固定ポイントとして時間を確保（📌 で表示）</li>
+    <li><strong>アポ後</strong>：アポ終了後から終了時刻まで、残りの店を最適順で配置</li>
+  </ul>
+  <p>時刻を入れない場合は、アポ地点を「必ず立ち寄る経由地」として全体の周遊順に組み込みます。</p>
+</section>
+
+<!-- 時間の見積もり -->
+<section>
+  <h2>⑤ 時間・距離の見積もり方</h2>
+  <ul>
+    <li><strong>移動時間</strong>：店間の直線距離を歩行速度で割って算出（設定で調整可）</li>
+    <li><strong>滞在時間</strong>：1店あたり一定時間を確保</li>
+    <li>指定の活動時間（開始〜終了）に収まる範囲で店を配置します</li>
+  </ul>
+  <div class="note">⚠ 距離は直線ベースの概算です。実際の所要時間は信号・経路・店内滞在で前後します。
+       最終的な移動は発行されるGoogleマップのルートでご確認ください。</div>
+</section>
+
+<a class="back" href="/">← プラン作成画面に戻る</a>
+</div>
+</body>
+</html>

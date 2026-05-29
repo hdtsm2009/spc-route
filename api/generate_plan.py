@@ -195,6 +195,251 @@ def build_free_route(candidates, origin_lat, origin_lng,
             haversine_m(cur_lat, cur_lng, float(origin_lat), float(origin_lng)), speed)
     return plan, return_travel
 
+# ─── 巡回順最適化（最近傍法 + 2-opt）─────────────────────────────────────────
+# 「どの店を回るか」を決めた後に「どの順で回ると一筆書きに近いか」を最適化する。
+# build_free_route はスコア優先で店を選ぶため順序が前後しがち。この関数で並べ直す。
+
+def _coords(r):
+    return (float(r["緯度"]), float(r["経度"]))
+
+
+def _path_len(order, pts, start, end=None):
+    """start→(order順にpts)→(endがあればend) の総距離(m)。end=None は開放経路。"""
+    d = 0.0
+    cur = start
+    for i in order:
+        d += haversine_m(cur[0], cur[1], pts[i][0], pts[i][1])
+        cur = pts[i]
+    if end is not None:
+        d += haversine_m(cur[0], cur[1], end[0], end[1])
+    return d
+
+
+def _nn_order(pts, start, end=None):
+    """最近傍法で訪問順の初期解を作る。"""
+    remaining = list(range(len(pts)))
+    order = []
+    cur = start
+    while remaining:
+        j = min(remaining, key=lambda i: haversine_m(cur[0], cur[1], pts[i][0], pts[i][1]))
+        order.append(j)
+        remaining.remove(j)
+        cur = pts[j]
+    return order
+
+
+def _two_opt(order, pts, start, end=None, max_pass=30):
+    """2-opt改善。区間反転で交差を解消し総距離を短縮する。"""
+    best = order[:]
+    n = len(best)
+    if n < 3:
+        return best
+    improved = True
+    passes = 0
+    while improved and passes < max_pass:
+        improved = False
+        passes += 1
+        for i in range(n - 1):
+            for k in range(i + 1, n):
+                cand = best[:i] + best[i:k + 1][::-1] + best[k + 1:]
+                if _path_len(cand, pts, start, end) + 1e-6 < _path_len(best, pts, start, end):
+                    best = cand
+                    improved = True
+    return best
+
+
+def optimize_order(stores, origin_lat, origin_lng, return_to_origin=False):
+    """店舗リストを地理的に最短に近い巡回順へ並べ替えて返す。"""
+    if len(stores) <= 1:
+        return list(stores)
+    pts = [_coords(r) for r in stores]
+    start = (float(origin_lat), float(origin_lng))
+    end = start if return_to_origin else None
+    order = _nn_order(pts, start, end)
+    order = _two_opt(order, pts, start, end)
+    return [stores[i] for i in order]
+
+
+def _entries_from_order(ordered, start_min, origin_lat, origin_lng, route_cfg):
+    """並び順に従って到着/出発時刻・移動時間を計算しentry配列を作る。"""
+    speed = route_cfg["walk_speed_m_per_min"]
+    stay = route_cfg["stay_minutes_per_store"]
+    entries = []
+    cur = start_min
+    cur_lat, cur_lng = float(origin_lat), float(origin_lng)
+    for r in ordered:
+        lat, lng = _coords(r)
+        dist = haversine_m(cur_lat, cur_lng, lat, lng)
+        travel = walk_minutes(dist, speed)
+        cur += travel
+        entries.append({
+            "time": _min2t(cur),
+            "depart_time": _min2t(cur + stay),
+            "store": r,
+            "travel_min": travel,
+            "dist_m": round(dist),
+        })
+        cur += stay
+        cur_lat, cur_lng = lat, lng
+    return entries, (cur_lat, cur_lng), cur
+
+
+def _appt_pseudo_store(appt):
+    """アポ固定点をstore互換dictにする（gmaps/レンダリング共通化のため）。"""
+    return {
+        "店名": appt.get("name") or appt.get("title") or "アポイント",
+        "住所": appt.get("addr", ""),
+        "緯度": appt["lat"],
+        "経度": appt["lng"],
+        "店舗ID": "APPT",
+    }
+
+
+def build_selected_route(selected, origin, window_start, window_end,
+                         return_to_origin, route_cfg, appt=None):
+    """選択された店舗(+任意のアポ)を最適順に並べてentry配列を作る。
+
+    返り値: (entries, return_travel, pre_plan, post_plan, mode)
+      mode="appt": アポ時刻ありで前後分割 / "free": 単一周遊
+    """
+    speed = route_cfg["walk_speed_m_per_min"]
+    stay = route_cfg["stay_minutes_per_store"]
+    o_lat, o_lng = float(origin["lat"]), float(origin["lng"])
+    ws = _t2min(window_start)
+
+    # アポ時刻あり → 前ブロック / アポ / 後ブロック に分割
+    if appt and appt.get("time_start"):
+        appt_lat, appt_lng = float(appt["lat"]), float(appt["lng"])
+        appt_ms = _t2min(appt["time_start"])
+        appt_me = _t2min(appt.get("time_end") or appt["time_start"])
+        buf = route_cfg.get("appt_buffer_min", 10)
+        # 起点から近い順に、アポ開始に間に合う範囲を前ブロックへ
+        before_ordered = optimize_order(selected, o_lat, o_lng)
+        pre, rest = [], []
+        cur = ws
+        cur_lat, cur_lng = o_lat, o_lng
+        for r in before_ordered:
+            lat, lng = _coords(r)
+            travel = walk_minutes(haversine_m(cur_lat, cur_lng, lat, lng), speed)
+            # この店を訪問後、アポ地点まで移動してアポ開始-bufに間に合うか
+            to_appt = walk_minutes(haversine_m(lat, lng, appt_lat, appt_lng), speed)
+            if cur + travel + stay + to_appt <= appt_ms - buf:
+                pre.append(r)
+                cur += travel + stay
+                cur_lat, cur_lng = lat, lng
+            else:
+                rest.append(r)
+        # 後ブロックはアポ地点を起点に最適化
+        post_ordered = optimize_order(rest, appt_lat, appt_lng,
+                                      return_to_origin=False) if rest else []
+        # 前ブロックも2-opt（アポ地点を終点に）
+        if len(pre) > 1:
+            pts = [_coords(r) for r in pre]
+            order = _two_opt(_nn_order(pts, (o_lat, o_lng), (appt_lat, appt_lng)),
+                             pts, (o_lat, o_lng), (appt_lat, appt_lng))
+            pre = [pre[i] for i in order]
+
+        pre_entries, (plat, plng), _ = _entries_from_order(pre, ws, o_lat, o_lng, route_cfg)
+        # アポへの移動
+        appt_travel = walk_minutes(haversine_m(plat, plng, appt_lat, appt_lng), speed)
+        appt_entry = {
+            "time": appt["time_start"],
+            "depart_time": appt.get("time_end") or appt["time_start"],
+            "store": _appt_pseudo_store(appt),
+            "travel_min": appt_travel,
+            "dist_m": round(haversine_m(plat, plng, appt_lat, appt_lng)),
+            "is_appt": True,
+            "appt_window": f"{appt['time_start']}〜{appt.get('time_end','')}",
+        }
+        post_entries, (elat, elng), _ = _entries_from_order(
+            post_ordered, appt_me, appt_lat, appt_lng, route_cfg)
+        entries = pre_entries + [appt_entry] + post_entries
+        return_travel = (walk_minutes(haversine_m(elat, elng, o_lat, o_lng), speed)
+                         if return_to_origin and post_ordered else 0)
+        return entries, return_travel, pre_entries, post_entries, "appt"
+
+    # アポ時刻なし → 単一周遊（アポ地点があれば必須経由地として含める）
+    pool = list(selected)
+    if appt:
+        pool.append(_appt_pseudo_store(appt))
+    ordered = optimize_order(pool, o_lat, o_lng, return_to_origin)
+    entries, (elat, elng), _ = _entries_from_order(ordered, ws, o_lat, o_lng, route_cfg)
+    if appt:
+        for e in entries:
+            if e["store"].get("店舗ID") == "APPT":
+                e["is_appt"] = True
+    return_travel = (walk_minutes(haversine_m(elat, elng, o_lat, o_lng), speed)
+                     if return_to_origin and ordered else 0)
+    return entries, return_travel, entries, [], "free"
+
+
+# ─── 起点の解決（自由入力→ジオコーディング / 店名一致 / 座標）────────────────
+import unicodedata as _ud
+
+try:
+    import _geocode as _geo
+except Exception:  # noqa: BLE001
+    _geo = None
+
+
+def _norm_name(s):
+    return _ud.normalize("NFKC", (s or "")).lower().replace(" ", "").replace("　", "")
+
+
+def _match_store_origin(stores, text):
+    nt = _norm_name(text)
+    if len(nt) < 2:
+        return None
+    exact = partial = None
+    for r in stores:
+        nm = _norm_name(r.get("店名", ""))
+        if not nm:
+            continue
+        try:
+            lat, lng = float(r.get("緯度") or ""), float(r.get("経度") or "")
+        except (ValueError, TypeError):
+            continue
+        if nm == nt:
+            exact = (r, lat, lng)
+            break
+        if partial is None and (nt in nm or nm in nt):
+            partial = (r, lat, lng)
+    hit = exact or partial
+    if not hit:
+        return None
+    r, lat, lng = hit
+    return {"lat": lat, "lng": lng, "title": r.get("店名", text), "source": "store"}
+
+
+def resolve_origin(stores, body, cfg=None):
+    """body から起点 {lat,lng,title,source} を決定。失敗時 None。
+    優先順: 明示lat/lng > エリアプリセット > 店名一致 > ジオコーディング。"""
+    if body.get("lat") not in (None, "") and body.get("lng") not in (None, ""):
+        try:
+            return {"lat": float(body["lat"]), "lng": float(body["lng"]),
+                    "title": body.get("origin_text") or "指定座標", "source": "latlng"}
+        except (ValueError, TypeError):
+            pass
+    area = (body.get("area") or "").strip()
+    if area and cfg:
+        preset = next((p for p in cfg.get("presets", []) if area in p["name"]), None)
+        if preset:
+            return {"lat": float(preset["lat"]), "lng": float(preset["lng"]),
+                    "title": preset.get("station", area), "source": "preset",
+                    "radius_m": preset.get("radius_m")}
+    text = (body.get("origin_text") or "").strip()
+    if not text:
+        return None
+    hit = _match_store_origin(stores, text)
+    if hit:
+        return hit
+    if _geo:
+        g = _geo.geocode(text)
+        if g:
+            g["source"] = "geocode"
+            return g
+    return None
+
 # ─── Google Maps リンク ───────────────────────────────────────────────────────
 
 _GMAPS_MAX = 9
@@ -638,6 +883,26 @@ def _store_row_html(entry: dict, prev_addr: str, owner: str, section: str = "fre
           <br><button class="exclude-btn" onclick="toggleExclude(this)">✕ 除外</button></td>
     </tr>"""
 
+def _appt_row_html(entry: dict) -> str:
+    r = entry["store"]
+    addr = r.get("住所", "")
+    ml = maps_link(addr, r.get("店名", ""))
+    win = entry.get("appt_window", entry.get("time", ""))
+    try:
+        latlng = f"{float(r.get('緯度') or '')},{float(r.get('経度') or '')}"
+    except (ValueError, TypeError):
+        latlng = ""
+    addr_esc = addr.replace('"', '&quot;')
+    return f"""
+    <tr class="store-row appt-row" data-addr="{addr_esc}" data-latlng="{latlng}" data-section="free" data-priority="main">
+      <td>{win}</td>
+      <td>🚶 徒歩{entry.get('travel_min', 0)}分<br><small>{entry.get('dist_m', 0)}m</small></td>
+      <td><a href="{ml}" target="_blank"><strong>📌 {r.get('店名', 'アポイント')}</strong></a>
+          <br><small class="addr">{addr}</small></td>
+      <td colspan="9">📌 確定アポイント（固定）</td>
+    </tr>"""
+
+
 # ─── HTML レンダリング ────────────────────────────────────────────────────────
 
 def render_html(plan, appt_info, owner, generated_at, origin, gmaps_buttons, route_cfg):
@@ -671,6 +936,10 @@ def render_html(plan, appt_info, owner, generated_at, origin, gmaps_buttons, rou
             '<br><small>活動時間や担当エリアを変えて再生成してください。</small>'
             '</td></tr>')
     for idx, e in enumerate(plan):
+        if e.get("is_appt"):
+            rows_html += _appt_row_html(e)
+            prev = e["store"].get("住所", prev)
+            continue
         sec = "free-backup" if idx >= priority_n else "free"
         rows_html += maybe_sep()
         rows_html += _store_row_html(e, prev, owner, section=sec)
@@ -788,17 +1057,12 @@ class handler(BaseHTTPRequestHandler):
             self._respond(400, "text/plain", "Invalid JSON")
             return
 
-        area_name        = body.get("area", "")
         owner            = body.get("owner", "")
         window_start     = body.get("window_start", "17:00")
         window_end       = body.get("window_end",   "21:00")
         max_stores       = int(body.get("max", 7))
-        priority_n       = int(body.get("priority_n", 6))
         return_to_origin = bool(body.get("return_to_origin", False))
-
-        if not area_name:
-            self._respond(400, "text/plain", "area は必須です")
-            return
+        store_ids        = body.get("store_ids") or []
 
         try:
             stores, cfg = _load_data()
@@ -806,39 +1070,80 @@ class handler(BaseHTTPRequestHandler):
             self._respond(500, "text/plain", f"データ読み込みエラー: {e}")
             return
 
-        presets    = cfg.get("presets", [])
         route_cfg  = cfg.get("route", {})
         geocod_cfg = cfg.get("geocoding", {})
 
-        preset = next((p for p in presets if area_name in p["name"]), None)
-        if not preset:
-            names = [p["name"] for p in presets]
+        # ── 起点の決定（lat/lng > area プリセット > 店名 > ジオコーディング）──
+        origin_r = resolve_origin(stores, body, cfg)
+        if not origin_r:
             self._respond(400, "text/plain",
-                          f'エリア "{area_name}" が見つかりません。登録済み: {names}')
+                          "起点を特定できませんでした。エリア・駅名・住所のいずれかを指定してください。")
             return
-
         origin = {
-            "name": preset["station"],
-            "addr": preset["station"],
-            "lat":  preset["lat"],
-            "lng":  preset["lng"],
+            "name": origin_r["title"],
+            "addr": origin_r["title"],
+            "lat":  origin_r["lat"],
+            "lng":  origin_r["lng"],
         }
-        radius = preset.get("radius_m", route_cfg.get("search_radius_m", 1200))
+        radius = int(body.get("radius_m") or origin_r.get("radius_m")
+                     or route_cfg.get("search_radius_m", 1200))
+
+        # ── 任意のアポ固定点 ──
+        appt = None
+        appt_in = body.get("appt") or {}
+        if appt_in and (appt_in.get("origin_text") or appt_in.get("text")
+                        or (appt_in.get("lat") and appt_in.get("lng"))):
+            ar = resolve_origin(stores, {
+                "origin_text": appt_in.get("origin_text") or appt_in.get("text"),
+                "lat": appt_in.get("lat"), "lng": appt_in.get("lng"),
+            }, cfg)
+            if not ar:
+                self._respond(400, "text/plain",
+                              "アポ地点を特定できませんでした。住所・駅名・店名を確認してください。")
+                return
+            appt = {
+                "name": appt_in.get("name") or ar["title"],
+                "addr": ar["title"],
+                "lat":  ar["lat"], "lng": ar["lng"],
+                "time_start": appt_in.get("time_start") or "",
+                "time_end":   appt_in.get("time_end") or "",
+            }
 
         try:
-            cands = filter_candidates(
-                stores, origin["lat"], origin["lng"], radius,
-                window_start, window_end, geocod_cfg)
+            # ── 訪問する店舗の決定 ──
+            if store_ids:
+                by_id = {r.get("店舗ID"): r for r in stores}
+                selected = [by_id[i] for i in store_ids if i in by_id]
+                # 座標を持つものだけ
+                selected = [r for r in selected
+                            if (r.get("緯度") or "").strip() and (r.get("経度") or "").strip()]
+            else:
+                # 旧来の自動選択（store_ids未指定時のフォールバック）
+                cands = filter_candidates(
+                    stores, origin["lat"], origin["lng"], radius,
+                    window_start, window_end, geocod_cfg)
+                auto_plan, _ = build_free_route(
+                    cands, origin["lat"], origin["lng"],
+                    window_start, window_end, max_stores,
+                    return_to_origin, route_cfg)
+                selected = [e["store"] for e in auto_plan]
 
-            plan, return_travel = build_free_route(
-                cands, origin["lat"], origin["lng"],
-                window_start, window_end, max_stores,
-                return_to_origin, route_cfg)
+            # ── 巡回順を最適化してルート構築 ──
+            entries, return_travel, pre_plan, post_plan, mode = build_selected_route(
+                selected, origin, window_start, window_end,
+                return_to_origin, route_cfg, appt=appt)
 
-            gmaps_buttons = build_gmaps_buttons(
-                plan, [], origin["addr"], origin["addr"],
-                mode="free", return_to_origin=return_to_origin)
+            if mode == "appt" and appt:
+                gmaps_buttons = build_gmaps_buttons(
+                    pre_plan, post_plan, _appt_pseudo_store(appt)["住所"] or
+                    f'{appt["lat"]},{appt["lng"]}', origin["addr"],
+                    mode="appt", return_to_origin=return_to_origin)
+            else:
+                gmaps_buttons = build_gmaps_buttons(
+                    entries, [], origin["addr"], origin["addr"],
+                    mode="free", return_to_origin=return_to_origin)
 
+            store_count = len([e for e in entries if not e.get("is_appt")])
             now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
             appt_info = {
                 "name":            origin["name"],
@@ -846,12 +1151,12 @@ class handler(BaseHTTPRequestHandler):
                 "window_start":    window_start,
                 "window_end":      window_end,
                 "radius":          radius,
-                "priority_n":      priority_n,
+                "priority_n":      len(entries),  # 予備候補セパレータを出さない
                 "return_to_origin": return_to_origin,
                 "return_travel":   return_travel,
             }
 
-            html = render_html(plan, appt_info, owner or "—", now,
+            html = render_html(entries, appt_info, owner or "—", now,
                                origin, gmaps_buttons, route_cfg)
 
         except Exception as e:
@@ -861,9 +1166,9 @@ class handler(BaseHTTPRequestHandler):
 
         # ── KV保存（設定時のみ）。保存できれば permalink を JSON で返す ──
         saved = self._try_save_plan(html, {
-            "area":  area_name,
+            "area":  origin["name"],
             "owner": owner or "—",
-            "count": len(plan),
+            "count": store_count,
             "window_start": window_start,
             "window_end":   window_end,
         })

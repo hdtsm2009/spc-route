@@ -2,6 +2,9 @@
   "functions": {
     "api/generate_plan.py": {
       "maxDuration": 30
+    },
+    "api/candidates.py": {
+      "maxDuration": 30
     }
   }
 }
