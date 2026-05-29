@@ -50,26 +50,45 @@ a:hover{text-decoration:underline}
 .appt-box>summary::-webkit-details-marker{display:none}
 .appt-body{padding:12px 14px}
 
-/* 候補チェックリスト */
+/* 候補カードリスト */
 #cand-panel{display:none}
-.cand-toolbar{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px}
-.cand-toolbar .tools a{font-size:12px;margin-right:12px;cursor:pointer}
-.cand-count{font-size:12px;color:#666}
-.cand-list{max-height:420px;overflow:auto;border:1px solid #eee;border-radius:6px}
-.cand-item{display:flex;gap:10px;padding:9px 12px;border-bottom:1px solid #f0f0f0;align-items:flex-start}
-.cand-item:hover{background:#f8f9fa}
-.cand-item input{margin-top:3px;transform:scale(1.2)}
-.cand-main{flex:1;min-width:0}
-.cand-name{font-weight:bold;font-size:13px}
-.cand-tags{margin:3px 0}
-.tag{display:inline-block;font-size:11px;padding:1px 7px;border-radius:10px;margin-right:5px}
-.rank-S{background:#fde8e8;color:#e74c3c}.rank-A{background:#fdf0e3;color:#e67e22}
-.rank-B{background:#e8f2fb;color:#3498db}.rank-C{background:#eef0f1;color:#7f8c8d}
-.tag-genre{background:#eef1f6;color:#566}
-.tag-chain{background:#f3e8fb;color:#8e44ad}
-.tag-dist{background:#eafaf1;color:#27ae60}
-.cand-pitch{font-size:12px;color:#555;line-height:1.5}
-.cand-score{font-size:11px;color:#999}
+.cand-toolbar{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px}
+.cand-controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.cand-controls a{font-size:12px;cursor:pointer}
+.cand-controls select{padding:5px 8px;border:1px solid #ccc;border-radius:4px;font-size:12px;background:#fff}
+.rank-filter{display:flex;gap:4px}
+.rf-chip{font-size:12px;font-weight:bold;border:1px solid #d6dde8;border-radius:6px;padding:3px 10px;
+         cursor:pointer;background:#fff;color:#aab;user-select:none}
+.rf-chip.on.rf-S{background:#fde8e8;color:#e74c3c;border-color:#f5b7b1}
+.rf-chip.on.rf-A{background:#fdf0e3;color:#e67e22;border-color:#f5cba7}
+.rf-chip.on.rf-B{background:#e8f2fb;color:#3498db;border-color:#aed6f1}
+.rf-chip.on.rf-C{background:#eef0f1;color:#7f8c8d;border-color:#d5dbdb}
+.cand-count{font-size:13px;color:#2c3e50;font-weight:bold;white-space:nowrap}
+.cand-list{max-height:560px;overflow:auto;display:flex;flex-direction:column;gap:8px;padding:2px}
+.cand-card{border:1px solid #e3e8ef;border-radius:8px;padding:11px 13px;cursor:pointer;background:#fff;transition:.12s}
+.cand-card:hover{border-color:#b9c5d4;box-shadow:0 1px 6px rgba(0,0,0,.07)}
+.cand-card.selected{border-color:#27ae60;background:#f3fbf6;box-shadow:0 0 0 1px #27ae60 inset}
+.cc-head{display:flex;align-items:center;gap:9px}
+.cc-check{width:20px;height:20px;border:2px solid #c2cbd6;border-radius:5px;flex:none;
+          display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;font-weight:bold;line-height:1}
+.cand-card.selected .cc-check{background:#27ae60;border-color:#27ae60}
+.cc-rank{flex:none;width:24px;height:24px;border-radius:6px;display:flex;align-items:center;
+         justify-content:center;font-weight:bold;font-size:13px}
+.cc-rank.rank-S{background:#fde8e8;color:#e74c3c}.cc-rank.rank-A{background:#fdf0e3;color:#e67e22}
+.cc-rank.rank-B{background:#e8f2fb;color:#3498db}.cc-rank.rank-C{background:#eef0f1;color:#7f8c8d}
+.cc-name{font-weight:bold;font-size:14px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cc-dist{flex:none;font-size:13px;color:#27ae60;font-weight:bold}
+.cc-open{flex:none;font-size:11px;white-space:nowrap}
+.cc-tags{margin:8px 0 0;display:flex;flex-wrap:wrap;gap:5px;padding-left:29px}
+.cc-genre{font-size:11px;background:#eef1f6;color:#556;padding:2px 9px;border-radius:10px}
+.cc-pitch{font-size:11px;background:#eaf6fb;color:#1a6a8a;border:1px solid #aad4e8;padding:2px 9px;border-radius:10px;font-weight:bold}
+.cc-pitch.hot{background:#fff3e0;color:#d35400;border-color:#f5cba7}
+.cc-chain{font-size:11px;background:#f3e8fb;color:#8e44ad;padding:2px 9px;border-radius:10px}
+.cc-meta{margin:8px 0 0;padding-left:29px;display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;font-size:12px;color:#999}
+.cc-addr{flex:1;min-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cc-links{white-space:nowrap}
+.cc-links a{font-size:12px;margin-left:12px}
+.cc-score{cursor:help;border-bottom:1px dotted #bbb;white-space:nowrap}
 
 /* 使い方ガイド */
 .guide{background:#fff;border:1px solid #dde;border-radius:8px;padding:0;margin-bottom:20px;
@@ -208,9 +227,14 @@ tr:hover td{background:#f8f9fa}
   <h2><span class="step-badge">2</span>行く店を選ぶ</h2>
   <p class="sub" id="cand-origin-note"></p>
   <div class="cand-toolbar">
-    <div class="tools">
+    <div class="cand-controls">
       <a onclick="selectAll(true)">すべて選択</a>
       <a onclick="selectAll(false)">すべて解除</a>
+      <select id="cand-sort" onchange="renderCandidates()">
+        <option value="score">スコア順</option>
+        <option value="dist">近い順</option>
+      </select>
+      <span class="rank-filter" id="rank-filter"></span>
     </div>
     <span class="cand-count" id="cand-count"></span>
   </div>
@@ -320,6 +344,10 @@ async function searchCandidates(){
     const data = await res.json();
     LAST_ORIGIN = data.origin;
     LAST_CANDIDATES = data.candidates || [];
+    SELECTED = new Set(LAST_CANDIDATES.slice(0, 8).map(c => c.id)); // 上位8件を初期選択
+    RANK_ON = {S:true, A:true, B:true, C:true};
+    document.getElementById('cand-sort').value = 'score';
+    buildRankFilter();
     renderCandidates();
     status.className = 'gen-status ok';
     status.textContent = `✅ ${data.count}件の候補が見つかりました。行く店を選んでください。`;
@@ -332,54 +360,110 @@ async function searchCandidates(){
   }
 }
 
+let SELECTED = new Set();                       // 選択中の店舗ID
+let RANK_ON  = {S:true, A:true, B:true, C:true}; // ランク絞り込み
+
+function rankOf(c){ return (c.rank || '').toString().charAt(0).toUpperCase(); }
+
+function buildRankFilter(){
+  document.getElementById('rank-filter').innerHTML =
+    ['S','A','B','C'].map(r =>
+      `<span class="rf-chip rf-${r} ${RANK_ON[r]?'on':''}" onclick="toggleRank('${r}')">${r}</span>`).join('');
+}
+function toggleRank(r){ RANK_ON[r] = !RANK_ON[r]; buildRankFilter(); renderCandidates(); }
+
+function openLabel(s){
+  return {'開いている可能性高':'🟢 営業中見込み','要確認':'🟡 営業時間要確認','除外':'🔴 時間外'}[s] || (s ? esc(s) : '');
+}
+function validPhone(p){
+  if(!p) return false;
+  const s = String(p);
+  if(/不明|情報|お待ち|確認|なし/.test(s)) return false;
+  return s.replace(/[^0-9]/g,'').length >= 9;
+}
+function validUrl(u){ return u && /^https?:\/\//.test(String(u)); }
+
+function cardHtml(c){
+  const r    = rankOf(c);
+  const sel  = SELECTED.has(c.id);
+  const dist = c.dist_m ? `${Math.round(c.dist_m)}m` : '';
+  const pitch = c.pitch
+    ? `<span class="cc-pitch ${c.pitch==='両サービス未掲載'?'hot':''}">${esc(c.pitch)}</span>` : '';
+  const genre = c.genre ? `<span class="cc-genre">${esc(c.genre)}</span>` : '';
+  const chain = c.chain ? `<span class="cc-chain">チェーン疑</span>` : '';
+  const mapUrl = `https://www.google.com/maps/search/?api=1&query=${c.lat},${c.lng}`;
+  let links = `<a href="${mapUrl}" target="_blank" rel="noopener" onclick="event.stopPropagation()">🗺 地図</a>`;
+  if(validPhone(c.phone)) links += `<a href="tel:${esc(String(c.phone).replace(/[^0-9+]/g,''))}" onclick="event.stopPropagation()">📞 電話</a>`;
+  if(validUrl(c.hp))      links += `<a href="${esc(c.hp)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">🌐 HP</a>`;
+  return `
+    <div class="cand-card ${sel?'selected':''}" data-id="${esc(c.id)}" onclick="toggleCard(this)">
+      <div class="cc-head">
+        <span class="cc-check">${sel?'✓':''}</span>
+        <span class="cc-rank rank-${r}">${esc(c.rank || '?')}</span>
+        <span class="cc-name">${esc(c.name)}</span>
+        <span class="cc-dist">${dist}</span>
+        <span class="cc-open">${openLabel(c.open_status)}</span>
+      </div>
+      <div class="cc-tags">${pitch}${genre}${chain}</div>
+      <div class="cc-meta">
+        <span class="cc-addr">📍 ${esc(c.addr || '住所情報なし')}</span>
+        <span class="cc-links">${links}</span>
+        <span class="cc-score" title="${esc(c.score_reason || 'スコア内訳なし')}">スコア ${esc(c.score)} ⓘ</span>
+      </div>
+    </div>`;
+}
+
 function renderCandidates(){
   const panel = document.getElementById('cand-panel');
   const list  = document.getElementById('cand-list');
   const note  = document.getElementById('cand-origin-note');
   if(LAST_ORIGIN){
-    const srcLabel = {preset:'エリア',store:'店舗',geocode:'住所/駅',latlng:'座標'}[LAST_ORIGIN.source] || '';
+    const srcLabel = {preset:'エリア',store:'店舗',geocode:'住所/駅',latlng:'指定地点'}[LAST_ORIGIN.source] || '';
     note.textContent = `起点: ${LAST_ORIGIN.title}${srcLabel ? '（'+srcLabel+'）' : ''}`;
   }
+  panel.style.display = 'block';
+
   if(LAST_CANDIDATES.length === 0){
-    list.innerHTML = '<p style="padding:14px;color:#888">条件に合う候補が見つかりませんでした。半径を広げるか、時間帯・起点を変えてお試しください。</p>';
-    panel.style.display = 'block';
+    list.innerHTML = '<p style="padding:18px;color:#888">条件に合う候補が見つかりませんでした。半径を広げるか、時間帯・起点を変えてお試しください。</p>';
     updateCount();
     return;
   }
-  list.innerHTML = LAST_CANDIDATES.map((c, i) => {
-    const checked = i < 8 ? 'checked' : '';   // 上位8件は自動チェック
-    const rank = (c.rank || '').toString().charAt(0).toUpperCase();
-    const rankTag = rank ? `<span class="tag rank-${esc(rank)}">${esc(c.rank)}</span>` : '';
-    const genreTag = c.genre ? `<span class="tag tag-genre">${esc(c.genre)}</span>` : '';
-    const distTag = c.dist_m ? `<span class="tag tag-dist">${Math.round(c.dist_m)}m</span>` : '';
-    const chainTag = c.chain ? `<span class="tag tag-chain">チェーン疑</span>` : '';
-    const open = c.open_status ? `<span class="cand-score">／ ${esc(c.open_status)}</span>` : '';
-    return `
-      <label class="cand-item">
-        <input type="checkbox" data-id="${esc(c.id)}" ${checked}>
-        <span class="cand-main">
-          <span class="cand-name">${esc(c.name)}</span>
-          <span class="cand-tags">${rankTag}${genreTag}${distTag}${chainTag}</span>
-          <span class="cand-pitch">${esc(c.pitch || '')}</span>
-          <span class="cand-score">スコア ${esc(c.score)}${c.score_reason ? '（'+esc(c.score_reason)+'）' : ''} ${open}</span>
-        </span>
-      </label>`;
-  }).join('');
-  panel.style.display = 'block';
-  list.querySelectorAll('input[type=checkbox]').forEach(cb => cb.addEventListener('change', updateCount));
+  // ランク絞り込み
+  let disp = LAST_CANDIDATES.filter(c => {
+    const r = rankOf(c);
+    return ['S','A','B','C'].includes(r) ? RANK_ON[r] : true;
+  });
+  // 並び替え
+  if(document.getElementById('cand-sort').value === 'dist'){
+    disp = disp.slice().sort((a,b) => (a.dist_m||0) - (b.dist_m||0));
+  }
+  list.innerHTML = disp.length
+    ? disp.map(cardHtml).join('')
+    : '<p style="padding:18px;color:#888">選択中のランク条件に合う候補がありません。上のランクフィルタを調整してください。</p>';
   updateCount();
 }
 
-function selectAll(on){
-  document.querySelectorAll('#cand-list input[type=checkbox]').forEach(cb => cb.checked = on);
+function toggleCard(el){
+  const id = el.dataset.id;
+  if(SELECTED.has(id)){
+    SELECTED.delete(id); el.classList.remove('selected'); el.querySelector('.cc-check').textContent = '';
+  } else {
+    SELECTED.add(id); el.classList.add('selected'); el.querySelector('.cc-check').textContent = '✓';
+  }
   updateCount();
 }
-function selectedIds(){
-  return Array.from(document.querySelectorAll('#cand-list input[type=checkbox]:checked'))
-    .map(cb => cb.dataset.id);
+function selectAll(on){
+  document.querySelectorAll('#cand-list .cand-card').forEach(card => {
+    const id = card.dataset.id;
+    if(on){ SELECTED.add(id); card.classList.add('selected'); card.querySelector('.cc-check').textContent = '✓'; }
+    else  { SELECTED.delete(id); card.classList.remove('selected'); card.querySelector('.cc-check').textContent = ''; }
+  });
+  updateCount();
 }
+function selectedIds(){ return Array.from(SELECTED); }
 function updateCount(){
-  document.getElementById('cand-count').textContent = `選択中: ${selectedIds().length}件`;
+  const shown = document.querySelectorAll('#cand-list .cand-card').length;
+  document.getElementById('cand-count').textContent = `選択中 ${SELECTED.size}件 ／ 表示 ${shown}件`;
 }
 
 // ── STEP 2: ルート作成 ──
