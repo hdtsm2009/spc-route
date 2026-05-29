@@ -81,38 +81,19 @@ a:hover{text-decoration:underline}
   <div class="gen-status" id="gen-status"></div>
 </div>
 
-<!-- ── 既存プラン一覧 ── -->
-<table>
-<thead><tr><th>プラン名</th><th>生成日時</th></tr></thead>
-<tbody>
-<tr>
-  <td><span style="background:#e8f5e9;color:#2e7d32;font-size:10px;padding:1px 6px;border-radius:8px;border:1px solid #a5d6a7;margin-right:6px">週次</span><a href="週次プラン_西日暮里エリア_20260529_1833.html" target="_blank">週次プラン 西日暮里エリア 20260529 1833</a></td>
-  <td style="color:#888;font-size:12px;white-space:nowrap">2026-05-29 18:33</td>
-</tr>
-<tr>
-  <td><span style="background:#e8f5e9;color:#2e7d32;font-size:10px;padding:1px 6px;border-radius:8px;border:1px solid #a5d6a7;margin-right:6px">週次</span><a href="週次プラン_西日暮里エリア_20260529_1816.html" target="_blank">週次プラン 西日暮里エリア 20260529 1816</a></td>
-  <td style="color:#888;font-size:12px;white-space:nowrap">2026-05-29 18:16</td>
-</tr>
-<tr>
-  <td><a href="訪問プラン_西日暮里駅_20260529_1811.html" target="_blank">訪問プラン 西日暮里駅 20260529 1811</a></td>
-  <td style="color:#888;font-size:12px;white-space:nowrap">2026-05-29 18:11</td>
-</tr>
-<tr>
-  <td><a href="訪問プラン_西日暮里テストアポ_20260529_1811.html" target="_blank">訪問プラン 西日暮里テストアポ 20260529 1811</a></td>
-  <td style="color:#888;font-size:12px;white-space:nowrap">2026-05-29 18:11</td>
-</tr>
-<tr>
-  <td><a href="訪問プラン_立ち呑み_あたりや食堂_なんば店_20260529_1811.html" target="_blank">訪問プラン 立ち呑み あたりや食堂 なんば店 20260529 1811</a></td>
-  <td style="color:#888;font-size:12px;white-space:nowrap">2026-05-29 18:11</td>
-</tr>
-<tr>
-  <td><a href="訪問プラン_JACK_西日暮里店_20260529_1811.html" target="_blank">訪問プラン JACK 西日暮里店 20260529 1811</a></td>
-  <td style="color:#888;font-size:12px;white-space:nowrap">2026-05-29 18:11</td>
-</tr>
-
-</tbody>
-</table>
-<p class="footer">一覧は <code>プラン週次生成.py</code> が自動更新します。</p>
+<!-- ── 既存プラン一覧（/api/plans から動的読み込み）── -->
+<h2 style="font-size:15px;color:#2c3e50;margin:0 0 10px">📑 生成済みプラン</h2>
+<div id="plan-list-wrap">
+  <p id="plan-list-loading" style="color:#888;font-size:13px">読み込み中...</p>
+  <table id="plan-list-table" style="display:none">
+    <thead><tr><th>エリア / 担当</th><th>件数</th><th>生成日時</th></tr></thead>
+    <tbody id="plan-list-body"></tbody>
+  </table>
+  <p id="plan-list-empty" style="display:none;color:#888;font-size:13px;padding:14px 0">
+    まだ保存されたプランはありません。上のフォームから生成すると、ここに一覧表示されます。
+  </p>
+</div>
+<p class="footer">プランは生成時に自動保存され、30日間共有URLで閲覧できます。</p>
 </div>
 
 <script>
@@ -141,12 +122,22 @@ async function generatePlan(){
       const msg = await res.text();
       throw new Error(msg);
     }
-    const html = await res.text();
-    const blob = new Blob([html], {type: 'text/html; charset=utf-8'});
-    const url  = URL.createObjectURL(blob);
-    window.open(url, '_blank');
-    status.className = 'gen-status ok';
-    status.textContent = '✅ 生成完了！新しいタブで開きました。';
+    const ctype = res.headers.get('Content-Type') || '';
+    if(ctype.includes('application/json')){
+      // 保存済み → パーマリンクを新タブで開き、一覧を更新
+      const data = await res.json();
+      window.open(data.permalink, '_blank');
+      status.className = 'gen-status ok';
+      status.textContent = '✅ 生成・保存完了！新しいタブで開きました（共有URLあり）。';
+      loadPlanList();
+    } else {
+      // KV未設定のフォールバック → blobで開く（保存なし）
+      const html = await res.text();
+      const blob = new Blob([html], {type: 'text/html; charset=utf-8'});
+      window.open(URL.createObjectURL(blob), '_blank');
+      status.className = 'gen-status ok';
+      status.textContent = '✅ 生成完了！新しいタブで開きました（※保存は無効）。';
+    }
   } catch(e){
     status.className = 'gen-status err';
     status.textContent = '❌ エラー: ' + e.message;
@@ -155,6 +146,44 @@ async function generatePlan(){
     btn.textContent = '🚀 生成';
   }
 }
+
+function esc(s){
+  return String(s == null ? '' : s).replace(/[&<>"]/g, c =>
+    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+}
+
+async function loadPlanList(){
+  const loading = document.getElementById('plan-list-loading');
+  const table   = document.getElementById('plan-list-table');
+  const body    = document.getElementById('plan-list-body');
+  const empty   = document.getElementById('plan-list-empty');
+  loading.style.display = '';
+  table.style.display = 'none';
+  empty.style.display = 'none';
+  try{
+    const res  = await fetch('/api/plans', {cache: 'no-store'});
+    const data = await res.json();
+    const plans = data.plans || [];
+    if(plans.length === 0){
+      loading.style.display = 'none';
+      empty.style.display = '';
+      return;
+    }
+    body.innerHTML = plans.map(p => `
+      <tr>
+        <td><a href="/api/plan?id=${encodeURIComponent(p.id)}" target="_blank">${esc(p.area)}</a>
+            <br><small style="color:#888">担当: ${esc(p.owner)} ／ ${esc(p.window || '')}</small></td>
+        <td style="white-space:nowrap">${esc(p.count)}件</td>
+        <td style="color:#888;font-size:12px;white-space:nowrap">${esc(p.created)}</td>
+      </tr>`).join('');
+    loading.style.display = 'none';
+    table.style.display = '';
+  } catch(e){
+    loading.textContent = '一覧の読み込みに失敗しました。';
+  }
+}
+
+document.addEventListener('DOMContentLoaded', loadPlanList);
 </script>
 </body>
 </html>

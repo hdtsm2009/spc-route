@@ -27,6 +27,13 @@ import unicodedata
 import datetime
 import urllib.parse
 import traceback
+import time
+import random
+
+try:
+    import _kv  # type: ignore
+except Exception:  # noqa: BLE001 - 兄弟import失敗時もHTMLフォールバックで動かす
+    _kv = None
 
 _DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -550,6 +557,20 @@ _MANUAL_HTML = """
 
 # ─── HTML 行・詳細レンダリング ────────────────────────────────────────────────
 
+def _phone_cell(phone: str) -> str:
+    """電話番号セル。数字を含む有効な番号のみ tel: リンク化。
+    「不明」「情報お待ち」等の無効値はテキスト（リンクなし）で表示。"""
+    p = (phone or "").strip()
+    if not p:
+        return ""
+    digits = re.sub(r"[^\d]", "", p)
+    # 数字が極端に少ない / 「不明」等が含まれる場合はリンクにしない
+    if len(digits) < 9 or any(kw in p for kw in ("不明", "情報", "お待ち", "確認", "なし")):
+        return f"<small>{p}</small>"
+    tel = re.sub(r"[^\d+]", "", p)
+    return f'<a href="tel:{tel}">{p}</a>'
+
+
 def _detail_html(r: dict) -> str:
     hp = r.get("HP", "")
     hp_cell = f'<a href="{hp}" target="_blank">{hp[:50]}</a>' if hp and hp.startswith("http") else hp
@@ -605,7 +626,7 @@ def _store_row_html(entry: dict, prev_addr: str, owner: str, section: str = "fre
       <td class="reason-cell"><small>{sr[:60]}{'…' if len(sr) > 60 else ''}</small></td>
       <td><small>{genre[:18]}</small></td>
       <td><small>{r.get('ソース', '')}</small></td>
-      <td><a href="tel:{phone}">{phone}</a></td>
+      <td>{_phone_cell(phone)}</td>
       <td><a href="{nl}" target="_blank">📍</a></td>
       <td>{_detail_html(r)}</td>
       <td class="memo-cell" contenteditable="true"></td>
@@ -639,6 +660,12 @@ def render_html(plan, appt_info, owner, generated_at, origin, gmaps_buttons, rou
 
     if plan:
         rows_html += '<tr class="section-header"><td colspan="12">── 訪問順 ──</td></tr>'
+    else:
+        rows_html += (
+            '<tr><td colspan="12" style="text-align:center;padding:28px 12px;color:#888">'
+            '😢 指定された条件に一致する候補店舗が見つかりませんでした。'
+            '<br><small>活動時間や担当エリアを変えて再生成してください。</small>'
+            '</td></tr>')
     for idx, e in enumerate(plan):
         sec = "free-backup" if idx >= priority_n else "free"
         rows_html += maybe_sep()
@@ -828,7 +855,45 @@ class handler(BaseHTTPRequestHandler):
                           f"生成エラー: {e}\n{traceback.format_exc()}")
             return
 
-        self._respond(200, "text/html; charset=utf-8", html)
+        # ── KV保存（設定時のみ）。保存できれば permalink を JSON で返す ──
+        saved = self._try_save_plan(html, {
+            "area":  area_name,
+            "owner": owner or "—",
+            "count": len(plan),
+            "window_start": window_start,
+            "window_end":   window_end,
+        })
+        if saved:
+            self._respond(200, "application/json; charset=utf-8",
+                          json.dumps(saved, ensure_ascii=False))
+        else:
+            # KV未設定 or 保存失敗 → 従来通りHTMLを直接返す（blobで開く）
+            self._respond(200, "text/html; charset=utf-8", html)
+
+    # ── プラン保存 ───────────────────────────────────────────────────────────
+    def _try_save_plan(self, html: str, meta: dict):
+        """KV設定時のみ保存。成功で {id, permalink, count} を返す。失敗時 None。"""
+        if _kv is None or not _kv.is_configured():
+            return None
+        try:
+            pid = f"{time.strftime('%Y%m%d_%H%M%S')}_{random.randint(1000, 9999)}"
+            # 本体スナップショット（30日保持）
+            _kv.kv_set(f"plan:{pid}", html, ex=2_592_000)
+            # 一覧メタ（新しい順、最新100件）
+            record = {
+                "id":      pid,
+                "area":    meta.get("area", ""),
+                "owner":   meta.get("owner", ""),
+                "count":   meta.get("count", 0),
+                "created": time.strftime("%Y-%m-%d %H:%M"),
+                "window":  f"{meta.get('window_start','')}〜{meta.get('window_end','')}",
+            }
+            _kv.kv_lpush("plans:list", json.dumps(record, ensure_ascii=False))
+            _kv.kv_ltrim("plans:list", 0, 99)
+            return {"id": pid, "permalink": f"/api/plan?id={pid}",
+                    "count": meta.get("count", 0)}
+        except Exception:
+            return None
 
     def _respond(self, status: int, content_type: str, body: str):
         encoded = body.encode("utf-8")
