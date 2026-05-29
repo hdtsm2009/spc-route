@@ -1,0 +1,7 @@
+{
+  "functions": {
+    "api/generate_plan.py": {
+      "maxDuration": 30
+    }
+  }
+}

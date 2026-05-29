@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>訪問プラン 一覧</title>
+<style>
+body{font-family:'Hiragino Sans','Meiryo',sans-serif;font-size:14px;margin:0;color:#333;background:#f5f6fa}
+.page-wrap{max-width:760px;margin:0 auto;padding:20px 16px}
+h1{font-size:18px;margin-bottom:4px}
+.meta{color:#888;font-size:12px;margin-bottom:20px}
+table{border-collapse:collapse;width:100%}
+th{background:#2c3e50;color:#fff;padding:7px 12px;text-align:left;font-size:13px}
+td{padding:8px 12px;border-bottom:1px solid #eee;background:#fff}
+tr:hover td{background:#f8f9fa}
+a{color:#2980b9;text-decoration:none}
+a:hover{text-decoration:underline}
+.footer{margin-top:16px;color:#aaa;font-size:11px}
+/* 生成フォーム */
+.gen-panel{background:#fff;border:1px solid #dde;border-radius:8px;padding:18px 20px;
+           margin-bottom:24px;box-shadow:0 1px 4px rgba(0,0,0,.06)}
+.gen-panel h2{font-size:15px;margin:0 0 14px;color:#2c3e50}
+.gen-row{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin-bottom:10px}
+.gen-field{display:flex;flex-direction:column;gap:4px}
+.gen-field label{font-size:11px;color:#666;font-weight:bold}
+.gen-field select,.gen-field input{padding:7px 10px;border:1px solid #ccc;border-radius:4px;
+  font-size:13px;background:#fff;min-width:120px}
+.gen-btn{padding:9px 20px;background:#2c3e50;color:#fff;border:none;border-radius:4px;
+          font-size:13px;cursor:pointer;white-space:nowrap}
+.gen-btn:hover{background:#1a252f}
+.gen-btn:disabled{background:#aaa;cursor:not-allowed}
+.gen-status{font-size:12px;margin-top:8px;min-height:20px}
+.gen-status.ok{color:#27ae60}
+.gen-status.err{color:#e74c3c}
+@media(max-width:480px){
+  .gen-row{flex-direction:column}
+  .gen-field select,.gen-field input{min-width:unset;width:100%}
+  .gen-btn{width:100%}
+}
+</style>
+</head>
+<body>
+<div class="page-wrap">
+<h1>📋 訪問プラン 一覧</h1>
+<p class="meta">最終更新: 2026-05-29 18:33</p>
+
+<!-- ── プラン生成フォーム ── -->
+<div class="gen-panel">
+  <h2>🚀 プランをその場で生成</h2>
+  <div class="gen-row">
+    <div class="gen-field">
+      <label>エリア</label>
+      <select id="gen-area">
+        <option value="">選択してください</option>
+        <option value="西日暮里エリア">西日暮里エリア (西日暮里駅)</option>
+<option value="難波エリア">難波エリア (難波駅)</option>
+<option value="渋谷エリア">渋谷エリア (渋谷駅)</option>
+<option value="新宿エリア">新宿エリア (新宿駅)</option>
+<option value="池袋エリア">池袋エリア (池袋駅)</option>
+<option value="梅田エリア">梅田エリア (梅田駅)</option>
+      </select>
+    </div>
+    <div class="gen-field">
+      <label>担当者</label>
+      <select id="gen-owner">
+        <option value="鈴村">鈴村</option>
+<option value="鈴木">鈴木</option>
+<option value="その他">その他</option>
+      </select>
+    </div>
+    <div class="gen-field">
+      <label>開始時刻</label>
+      <input type="time" id="gen-start" value="17:00">
+    </div>
+    <div class="gen-field">
+      <label>終了時刻</label>
+      <input type="time" id="gen-end" value="21:00">
+    </div>
+    <button class="gen-btn" id="gen-btn" onclick="generatePlan()">🚀 生成</button>
+  </div>
+  <div class="gen-status" id="gen-status"></div>
+</div>
+
+<!-- ── 既存プラン一覧 ── -->
+<table>
+<thead><tr><th>プラン名</th><th>生成日時</th></tr></thead>
+<tbody>
+<tr>
+  <td><span style="background:#e8f5e9;color:#2e7d32;font-size:10px;padding:1px 6px;border-radius:8px;border:1px solid #a5d6a7;margin-right:6px">週次</span><a href="週次プラン_西日暮里エリア_20260529_1833.html" target="_blank">週次プラン 西日暮里エリア 20260529 1833</a></td>
+  <td style="color:#888;font-size:12px;white-space:nowrap">2026-05-29 18:33</td>
+</tr>
+<tr>
+  <td><span style="background:#e8f5e9;color:#2e7d32;font-size:10px;padding:1px 6px;border-radius:8px;border:1px solid #a5d6a7;margin-right:6px">週次</span><a href="週次プラン_西日暮里エリア_20260529_1816.html" target="_blank">週次プラン 西日暮里エリア 20260529 1816</a></td>
+  <td style="color:#888;font-size:12px;white-space:nowrap">2026-05-29 18:16</td>
+</tr>
+<tr>
+  <td><a href="訪問プラン_西日暮里駅_20260529_1811.html" target="_blank">訪問プラン 西日暮里駅 20260529 1811</a></td>
+  <td style="color:#888;font-size:12px;white-space:nowrap">2026-05-29 18:11</td>
+</tr>
+<tr>
+  <td><a href="訪問プラン_西日暮里テストアポ_20260529_1811.html" target="_blank">訪問プラン 西日暮里テストアポ 20260529 1811</a></td>
+  <td style="color:#888;font-size:12px;white-space:nowrap">2026-05-29 18:11</td>
+</tr>
+<tr>
+  <td><a href="訪問プラン_立ち呑み_あたりや食堂_なんば店_20260529_1811.html" target="_blank">訪問プラン 立ち呑み あたりや食堂 なんば店 20260529 1811</a></td>
+  <td style="color:#888;font-size:12px;white-space:nowrap">2026-05-29 18:11</td>
+</tr>
+<tr>
+  <td><a href="訪問プラン_JACK_西日暮里店_20260529_1811.html" target="_blank">訪問プラン JACK 西日暮里店 20260529 1811</a></td>
+  <td style="color:#888;font-size:12px;white-space:nowrap">2026-05-29 18:11</td>
+</tr>
+
+</tbody>
+</table>
+<p class="footer">一覧は <code>プラン週次生成.py</code> が自動更新します。</p>
+</div>
+
+<script>
+async function generatePlan(){
+  const area  = document.getElementById('gen-area').value;
+  const owner = document.getElementById('gen-owner').value;
+  const start = document.getElementById('gen-start').value;
+  const end   = document.getElementById('gen-end').value;
+  const status = document.getElementById('gen-status');
+  const btn    = document.getElementById('gen-btn');
+
+  if(!area){ status.className='gen-status err'; status.textContent='⚠ エリアを選択してください'; return; }
+
+  btn.disabled = true;
+  btn.textContent = '⏳ 生成中...';
+  status.className = 'gen-status';
+  status.textContent = 'プランを生成しています（初回は10〜15秒かかる場合があります）...';
+
+  try{
+    const res = await fetch('/api/generate_plan', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({area, owner, window_start: start, window_end: end})
+    });
+    if(!res.ok){
+      const msg = await res.text();
+      throw new Error(msg);
+    }
+    const html = await res.text();
+    const blob = new Blob([html], {type: 'text/html; charset=utf-8'});
+    const url  = URL.createObjectURL(blob);
+    window.open(url, '_blank');
+    status.className = 'gen-status ok';
+    status.textContent = '✅ 生成完了！新しいタブで開きました。';
+  } catch(e){
+    status.className = 'gen-status err';
+    status.textContent = '❌ エラー: ' + e.message;
+  } finally{
+    btn.disabled = false;
+    btn.textContent = '🚀 生成';
+  }
+}
+</script>
+</body>
+</html>
