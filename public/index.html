@@ -239,12 +239,22 @@ tr:hover td{background:#f8f9fa}
 <script>
 // エリアプリセット（チップ → 起点欄に流し込む）
 const PRESETS = [
-  {label:'西日暮里', q:'西日暮里駅'},
-  {label:'難波',     q:'難波駅'},
-  {label:'渋谷',     q:'渋谷駅'},
-  {label:'新宿',     q:'新宿駅'},
-  {label:'池袋',     q:'池袋駅'},
-  {label:'梅田',     q:'梅田駅'},
+  {label:'東京',   q:'東京駅'},
+  {label:'新宿',   q:'新宿駅'},
+  {label:'渋谷',   q:'渋谷駅'},
+  {label:'上野',   q:'上野駅'},
+  {label:'神奈川', q:'神奈川駅'},
+  {label:'横浜',   q:'横浜駅'},
+  {label:'池袋',   q:'池袋駅'},
+  {label:'六本木', q:'六本木駅'},
+  {label:'梅田',   q:'梅田駅'},
+  {label:'銀座',   q:'銀座駅'},
+  {label:'秋葉原', q:'秋葉原駅'},
+  {label:'なんば', q:'難波駅'},
+  {label:'名古屋', q:'名古屋駅'},
+  {label:'神戸',   q:'神戸駅'},
+  {label:'天王寺', q:'天王寺駅'},
+  {label:'福岡',   q:'博多駅'},
 ];
 
 let LAST_ORIGIN = null;     // {lat,lng,title,source}
@@ -321,7 +331,7 @@ function renderCandidates(){
   }
   if(LAST_CANDIDATES.length === 0){
     list.innerHTML = '<p style="padding:14px;color:#888">条件に合う候補が見つかりませんでした。半径を広げるか、時間帯・起点を変えてお試しください。</p>';
-    panel.style.display = '';
+    panel.style.display = 'block';
     updateCount();
     return;
   }
@@ -344,7 +354,7 @@ function renderCandidates(){
         </span>
       </label>`;
   }).join('');
-  panel.style.display = '';
+  panel.style.display = 'block';
   list.querySelectorAll('input[type=checkbox]').forEach(cb => cb.addEventListener('change', updateCount));
   updateCount();
 }
