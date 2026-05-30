@@ -19,7 +19,8 @@ with open(CONFIG_PATH, encoding="utf-8") as fp:
     CFG = json.load(fp)
 
 SC = CFG["scoring"]
-BASE_SCORE = SC["base"]
+LISTING = SC["listing"]
+ENG = SC["engagement"]
 PENALTY = SC["penalty"]
 TH = SC["thresholds"]
 GENRE_TIERS = SC["sports_genre_tiers"]
@@ -61,94 +62,116 @@ def _try_float(v):
         return 0.0
 
 
-def calc_score(row: dict) -> tuple[int, str, str]:
-    """スコア・スコア理由・除外理由を返す。"""
-    score = 0
-    plus_reasons = []
-    minus_reasons = []
-    exclude_reasons = []
-
-    # ─ プラス要素 ─
-    if row.get("スポカフェ掲載") != "○":
-        score += BASE_SCORE["spocafe_unlisted"]
-        plus_reasons.append(f"スポカフェ未掲載+{BASE_SCORE['spocafe_unlisted']}")
-    if row.get("ファンスタ掲載") != "○":
-        score += BASE_SCORE["fansta_unlisted"]
-        plus_reasons.append(f"ファンスタ未掲載+{BASE_SCORE['fansta_unlisted']}")
-
+def _engagement(row: dict, plus_reasons: list) -> int:
+    """掲載状況以外の「店の魅力・温度」を表す補助点。
+    掲載店の並び順と、未掲載店のB/C判定に使う。"""
+    eng = 0
     sources = str(row.get("ソース", ""))
-    if "食べログ" in sources:
-        score += BASE_SCORE["source_tabelog"]
-        plus_reasons.append(f"食べログ由来+{BASE_SCORE['source_tabelog']}")
+
+    # 食べログ単独の由来加点は廃止（優先度最低）。スポーツ観戦の実機材フラグのみ加点。
+    if "食べログ" in sources and str(row.get("スポーツ設備", "")).strip():
+        eng += ENG["tabelog_sports_facility"]
+        plus_reasons.append(f"スポーツ設備有+{ENG['tabelog_sports_facility']}")
     if "ダーツライブ" in sources:
-        score += BASE_SCORE["source_dartslive"]
-        plus_reasons.append(f"ダーツライブ由来+{BASE_SCORE['source_dartslive']}")
+        eng += ENG["source_dartslive"]
+        plus_reasons.append(f"ダーツライブ由来+{ENG['source_dartslive']}")
     if "+" in sources:
-        score += BASE_SCORE["multi_source"]
-        plus_reasons.append(f"複数ソース+{BASE_SCORE['multi_source']}")
+        eng += ENG["multi_source"]
+        plus_reasons.append(f"複数ソース+{ENG['multi_source']}")
 
     rating = _try_float(row.get("評価"))
     review = _try_float(row.get("口コミ数"))
     if rating >= SC["review_score_threshold"] or review >= SC["review_count_threshold"]:
-        score += BASE_SCORE["high_review"]
-        plus_reasons.append(f"評価/口コミ高+{BASE_SCORE['high_review']}")
+        eng += ENG["high_review"]
+        plus_reasons.append(f"評価/口コミ高+{ENG['high_review']}")
 
     gs, gr = genre_score(row.get("業態ジャンル"))
     if gs > 0:
-        score += gs
+        eng += gs
         plus_reasons.append(gr)
 
     if row.get("geo_quality") == "A":
-        score += BASE_SCORE["geocode_quality_a"]
-        plus_reasons.append(f"住所精度A+{BASE_SCORE['geocode_quality_a']}")
+        eng += ENG["geocode_quality_a"]
+        plus_reasons.append(f"住所精度A+{ENG['geocode_quality_a']}")
 
-    # ─ マイナス要素 ─
-    if row.get("スポカフェ掲載") == "○":
-        score += PENALTY["spocafe_listed"]
-        minus_reasons.append("スポカフェ掲載済")
-        exclude_reasons.append("スポカフェ掲載済")
-    if row.get("geo_quality") in ("C", "NG"):
-        score += PENALTY["geocode_quality_c_or_ng"]
-        minus_reasons.append(f"住所精度{row.get('geo_quality')}")
-        exclude_reasons.append(f"住所精度{row.get('geo_quality')}→ルート除外")
-    if str(row.get("sales_status", "")).strip() == "NG":
-        score += PENALTY["sales_status_ng"]
-        minus_reasons.append("訪問NG済")
-        exclude_reasons.append("訪問NG済")
-    if str(row.get("ソース", "")).strip() == "スペースマーケット":
-        score += PENALTY.get("spacemarket_only", -15)
-        minus_reasons.append("スペースマーケット単一ソース")
-    rental_kws = ["スペース貸", "レンタルスペース", "カラオケスペース", "パーティースペース"]
-    genre_str = str(row.get("業態ジャンル", ""))
-    if any(kw in genre_str for kw in rental_kws):
-        score += PENALTY.get("rental_space_genre", -25)
-        minus_reasons.append("スペース貸し業態")
-        exclude_reasons.append("スペース貸し業態→除外")
+    # チェーン疑い（フリーダイヤル）・スペースマーケット単一は温度を下げる
     phone_digits = re.sub(r"[^\d]", "", str(row.get("電話番号", "") or ""))
     if phone_digits.startswith(("0120", "0800", "0570")):
-        score += PENALTY.get("free_dial", -10)
-        minus_reasons.append("フリーダイヤル(チェーン疑い)")
+        eng += PENALTY.get("free_dial", -10)
+        plus_reasons.append("フリーダイヤル(チェーン疑い)")
+    if str(row.get("ソース", "")).strip() == "スペースマーケット":
+        eng += PENALTY.get("spacemarket_only", -15)
+        plus_reasons.append("スペマ単一ソース")
+    return eng
+
+
+def calc_score(row: dict) -> tuple[int, str, str, str]:
+    """(営業スコア, 営業ランク, スコア理由, 除外理由) を返す。
+
+    ランクは「掲載状況」で決まる:
+      スポカフェ＋ファンスタ両方掲載 → S（集客意欲が最も高く有料転換しやすい）
+      スポカフェのみ掲載            → AS（無料→有料転換／上位アップセルの本命）
+      ファンスタのみ掲載            → AF（競合のみ→スポカフェへ奪取）
+      どちらも未掲載（コールド）    → 補助点で B / C
+    掲載店は有料プラン契約済みでも残す（上位プランへのアップセル対象）。
+    """
+    plus_reasons = []
+    exclude_reasons = []
+
+    spo = row.get("スポカフェ掲載") == "○"
+    fan = row.get("ファンスタ掲載") == "○"
+    plan = str(row.get("スポカフェプラン", "")).strip()
+
+    eng = _engagement(row, plus_reasons)
+
+    # スポカフェ無料掲載＝有料転換の本命、有料契約＝上位プランへのアップセル
+    if spo:
+        if plan and plan != "フリー":
+            plus_reasons.append(f"スポカフェ有料({plan})→上位転換")
+        else:
+            eng += ENG.get("spocafe_free_upsell", 0)
+            plus_reasons.append(f"スポカフェ無料掲載→有料転換+{ENG.get('spocafe_free_upsell', 0)}")
+    if fan and not spo:
+        eng += ENG.get("fansta_only_takeover", 0)
+
+    # ── 掲載コンボでランク確定 ──
+    if spo and fan:
+        rank = "S"
+        score = LISTING["both_base"] + eng
+        plus_reasons.insert(0, "スポカフェ＋ファンスタ両方掲載＝最優先")
+    elif spo:
+        rank = "AS"
+        score = LISTING["one_base"] + eng
+        plus_reasons.insert(0, "スポカフェ掲載(無料→有料転換／上位アップセル)")
+    elif fan:
+        rank = "AF"
+        score = LISTING.get("one_base_fansta", LISTING["one_base"] - 20) + eng
+        plus_reasons.insert(0, "ファンスタのみ掲載(競合→奪取)")
+    else:
+        score = eng
+        rank = "B" if eng >= LISTING["none_b_threshold"] else "C"
+        plus_reasons.insert(0, "未掲載(新規開拓)")
+
+    # ── ハード除外（ランクに優先） ──
+    if str(row.get("sales_status", "")).strip() == "NG":
+        rank = "除外"
+        score = -100
+        exclude_reasons.append("訪問NG済")
+    rental_kws = ["スペース貸", "レンタルスペース", "カラオケスペース", "パーティースペース"]
+    if any(kw in str(row.get("業態ジャンル", "")) for kw in rental_kws):
+        rank = "除外"
+        score = min(score, -50)
+        exclude_reasons.append("スペース貸し業態→除外")
+    # ジオコーディング品質はルート可否のみ（ランクは保持、filterで除外）
+    if row.get("geo_quality") in ("C", "NG"):
+        exclude_reasons.append(f"住所精度{row.get('geo_quality')}→ルート除外")
 
     score = max(score, -100)
-
-    # スコア理由文
-    reason_parts = plus_reasons + ([f"減点: {', '.join(minus_reasons)}"] if minus_reasons else [])
+    reason_parts = plus_reasons + (
+        [f"除外: {', '.join(exclude_reasons)}"] if exclude_reasons else [])
     score_reason = " / ".join(reason_parts)
-
     exclude_reason = ", ".join(exclude_reasons) if exclude_reasons else ""
-    return score, score_reason, exclude_reason
-
-
-def score_to_rank(score: int) -> str:
-    if score >= TH["S"]:
-        return "S"
-    if score >= TH["A"]:
-        return "A"
-    if score >= TH["B"]:
-        return "B"
-    if score >= TH["C"]:
-        return "C"
-    return "除外"
+    return score, rank, score_reason, exclude_reason
 
 
 # ─── 新規 sales 列（デフォルト空） ─────────────────────────────────────────
@@ -176,12 +199,24 @@ def main():
     rows = list(csv.DictReader(open(in_csv, encoding="utf-8-sig")))
     print(f"入力: {len(rows)} 件")
 
+    # スポカフェ掲載店の地名概算補完（フェーズ04b の出力）を取り込む
+    suppl_csv = os.path.join(BASE, "_output", "補完_スポカフェ掲載店.csv")
+    if os.path.exists(suppl_csv):
+        suppl = list(csv.DictReader(open(suppl_csv, encoding="utf-8-sig")))
+        # geocoded.csv に無い列は補完側にも空で揃える
+        base_cols = set(rows[0].keys()) if rows else set()
+        for s in suppl:
+            for c in base_cols:
+                s.setdefault(c, "")
+        rows.extend(suppl)
+        print(f"  ＋スポカフェ掲載店補完(地名概算): {len(suppl)} 件 → 計 {len(rows)} 件")
+
     # geo_quality を A/B/C/NG に改訂 + スコア計算
     for r in rows:
         r["geo_quality"] = geo_quality_rank(r.get("緯度"), r.get("経度"), r.get("ジオコーディング精度"))
-        score, score_reason, exclude_reason = calc_score(r)
+        score, rank, score_reason, exclude_reason = calc_score(r)
         r["営業スコア"] = score
-        r["営業ランク"] = score_to_rank(score)
+        r["営業ランク"] = rank
         r["スコア理由"] = score_reason
         r["除外理由"] = exclude_reason
         # chain_flag: フリーダイヤルはチェーン・大型FC疑い
@@ -222,7 +257,7 @@ def main():
     print("=" * 50)
     print(f"出力: {out_csv}")
     print("【営業ランク分布】")
-    for rank in ("S", "A", "B", "C", "除外"):
+    for rank in ("S", "AS", "AF", "B", "C", "除外"):
         print(f"  {rank}: {by_rank.get(rank, 0)}")
     print("【ジオコーディング品質】")
     for q in ("A", "B", "C", "NG"):

@@ -17,22 +17,24 @@
   },
 
   "scoring": {
-    "base": {
-      "spocafe_unlisted": 25,
-      "fansta_unlisted": 15,
-      "source_tabelog": 15,
+    "_model": "掲載状況ベース。両方掲載=S/スポカフェのみ=AS/ファンスタのみ=AF/未掲載=B,C。掲載店ほど集客意欲が高く有料転換・奪取の営業先。",
+    "listing": {
+      "both_base": 200,
+      "one_base": 120,
+      "one_base_fansta": 100,
+      "none_b_threshold": 20
+    },
+    "engagement": {
+      "spocafe_free_upsell": 8,
+      "fansta_only_takeover": 4,
+      "tabelog_sports_facility": 12,
       "source_dartslive": 10,
-      "multi_source": 10,
+      "multi_source": 8,
       "high_review": 10,
-      "within_15min_walk": 5,
-      "open_in_window": 5,
       "geocode_quality_a": 5
     },
     "penalty": {
-      "spocafe_listed": -100,
-      "genre_mismatch": -30,
       "geocode_quality_c_or_ng": -20,
-      "clearly_closed": -20,
       "sales_status_ng": -100,
       "spacemarket_only": -15,
       "rental_space_genre": -25,

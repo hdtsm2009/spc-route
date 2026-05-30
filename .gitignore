@@ -9,6 +9,7 @@ _output/_archive/
 _output/統合店舗マスタ.csv
 _output/統合店舗マスタ_geocoded.csv
 _output/統合店舗マスタ_v2.csv
+_output/補完_スポカフェ掲載店.csv
 
 # ジオコードキャッシュ
 _data/geocode_cache.json

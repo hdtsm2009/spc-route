@@ -103,6 +103,7 @@ class handler(BaseHTTPRequestHandler):
                 "hp":           r.get("HP", ""),
                 "source":       r.get("ソース", ""),
                 "chain":        r.get("chain_flag") == "チェーン疑",
+                "approx":       "概算" in str(r.get("ジオコーディング精度", "")),
             })
 
         self._json(200, {"origin": origin, "candidates": out, "count": len(out)})

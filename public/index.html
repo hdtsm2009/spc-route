@@ -61,6 +61,8 @@ a:hover{text-decoration:underline}
          cursor:pointer;background:#fff;color:#aab;user-select:none}
 .rf-chip.on.rf-S{background:#fde8e8;color:#e74c3c;border-color:#f5b7b1}
 .rf-chip.on.rf-A{background:#fdf0e3;color:#e67e22;border-color:#f5cba7}
+.rf-chip.on.rf-AS{background:#fdf0e3;color:#e67e22;border-color:#f5cba7}
+.rf-chip.on.rf-AF{background:#fbeee6;color:#d35400;border-color:#edbb99}
 .rf-chip.on.rf-B{background:#e8f2fb;color:#3498db;border-color:#aed6f1}
 .rf-chip.on.rf-C{background:#eef0f1;color:#7f8c8d;border-color:#d5dbdb}
 .cand-count{font-size:13px;color:#2c3e50;font-weight:bold;white-space:nowrap}
@@ -75,7 +77,9 @@ a:hover{text-decoration:underline}
 .cc-rank{flex:none;width:24px;height:24px;border-radius:6px;display:flex;align-items:center;
          justify-content:center;font-weight:bold;font-size:13px}
 .cc-rank.rank-S{background:#fde8e8;color:#e74c3c}.cc-rank.rank-A{background:#fdf0e3;color:#e67e22}
+.cc-rank.rank-AS{background:#fdf0e3;color:#e67e22}.cc-rank.rank-AF{background:#fbeee6;color:#d35400}
 .cc-rank.rank-B{background:#e8f2fb;color:#3498db}.cc-rank.rank-C{background:#eef0f1;color:#7f8c8d}
+.cc-approx{display:inline-block;font-size:10px;color:#b9770e;background:#fef5e7;border:1px solid #f5d896;border-radius:4px;padding:0 5px;margin-left:4px;vertical-align:middle}
 .cc-name{font-weight:bold;font-size:14px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cc-dist{flex:none;font-size:13px;color:#27ae60;font-weight:bold}
 .cc-open{flex:none;font-size:11px;white-space:nowrap}
@@ -142,7 +146,7 @@ tr:hover td{background:#f8f9fa}
       <strong style="color:#e67e22">A</strong>=高優先 ／
       <strong style="color:#3498db">B</strong>=候補 ／
       <strong style="color:#7f8c8d">C</strong>=低優先。
-      「両サービス未掲載」の店が狙い目です。
+      掲載状況で決まります（両方掲載=S／片方=A／未掲載=B・C）。「両サービス掲載◎」の店が最有力です。
     </p>
     <a class="guide-link" href="/guide.html" target="_blank">▶ 仕組み・店舗選定基準・ルート算出ロジックの詳しい解説はこちら</a>
   </div>
@@ -343,7 +347,7 @@ async function searchCandidates(){
     LAST_ORIGIN = data.origin;
     LAST_CANDIDATES = data.candidates || [];
     SELECTED = new Set(LAST_CANDIDATES.slice(0, 8).map(c => c.id)); // 上位8件を初期選択
-    RANK_ON = {S:true, A:true, B:true, C:true};
+    RANK_ON = {S:true, AS:true, AF:true, B:true, C:true};
     document.getElementById('cand-sort').value = 'score';
     buildRankFilter();
     renderCandidates();
@@ -359,13 +363,17 @@ async function searchCandidates(){
 }
 
 let SELECTED = new Set();                       // 選択中の店舗ID
-let RANK_ON  = {S:true, A:true, B:true, C:true}; // ランク絞り込み
+let RANK_ON  = {S:true, AS:true, AF:true, B:true, C:true}; // ランク絞り込み
 
-function rankOf(c){ return (c.rank || '').toString().charAt(0).toUpperCase(); }
+const RANK_KEYS = ['S','AS','AF','B','C'];
+function rankOf(c){
+  const r = (c.rank || '').toString().toUpperCase();
+  return RANK_KEYS.includes(r) ? r : r.charAt(0);
+}
 
 function buildRankFilter(){
   document.getElementById('rank-filter').innerHTML =
-    ['S','A','B','C'].map(r =>
+    RANK_KEYS.map(r =>
       `<span class="rf-chip rf-${r} ${RANK_ON[r]?'on':''}" onclick="toggleRank('${r}')">${r}</span>`).join('');
 }
 function toggleRank(r){ RANK_ON[r] = !RANK_ON[r]; buildRankFilter(); renderCandidates(); }
@@ -386,7 +394,7 @@ function cardHtml(c){
   const sel  = SELECTED.has(c.id);
   const dist = c.dist_m ? `${Math.round(c.dist_m)}m` : '';
   const pitch = c.pitch
-    ? `<span class="cc-pitch ${c.pitch==='両サービス未掲載'?'hot':''}">${esc(c.pitch)}</span>` : '';
+    ? `<span class="cc-pitch ${(c.pitch||'').indexOf('両サービス掲載')===0?'hot':''}">${esc(c.pitch)}</span>` : '';
   const genre = c.genre ? `<span class="cc-genre">${esc(c.genre)}</span>` : '';
   const chain = c.chain ? `<span class="cc-chain">チェーン疑</span>` : '';
   const mapUrl = `https://www.google.com/maps/search/?api=1&query=${c.lat},${c.lng}`;
@@ -404,7 +412,7 @@ function cardHtml(c){
       </div>
       <div class="cc-tags">${pitch}${genre}${chain}</div>
       <div class="cc-meta">
-        <span class="cc-addr">📍 ${esc(c.addr || '住所情報なし')}</span>
+        <span class="cc-addr">📍 ${esc(c.addr || '住所情報なし')}${c.approx?' <span class="cc-approx" title="番地が無いため地名（町名）の中心点で表示。現地で要確認">概算位置(町名)</span>':''}</span>
         <span class="cc-links">${links}</span>
         <span class="cc-score" title="${esc(c.score_reason || 'スコア内訳なし')}">スコア ${esc(c.score)} ⓘ</span>
       </div>
@@ -429,7 +437,7 @@ function renderCandidates(){
   // ランク絞り込み
   let disp = LAST_CANDIDATES.filter(c => {
     const r = rankOf(c);
-    return ['S','A','B','C'].includes(r) ? RANK_ON[r] : true;
+    return RANK_KEYS.includes(r) ? RANK_ON[r] : true;
   });
   // 並び替え
   if(document.getElementById('cand-sort').value === 'dist'){

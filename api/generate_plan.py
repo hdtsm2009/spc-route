@@ -108,7 +108,9 @@ def filter_candidates(rows, origin_lat, origin_lng, radius_m,
     for r in rows:
         if str(r.get("sales_status", "")).strip() == "NG":
             continue
-        if str(r.get("スポカフェ掲載", "")).strip() == "○":
+        # スポカフェ掲載店は除外しない：無料掲載＝有料転換の本命、
+        # 有料契約＝上位プランへのアップセル対象として候補に含める。
+        if str(r.get("営業ランク", "")).strip() == "除外":
             continue
         try:
             lat = float(r.get("緯度") or "")
@@ -137,7 +139,7 @@ def get_score(r: dict) -> int:
             return int(float(r["営業スコア"]))
         except (ValueError, TypeError):
             pass
-    return {"S": 70, "A": 50, "B": 30, "C": 10}.get(r.get("営業ランク", ""), 20)
+    return {"S": 70, "AS": 50, "AF": 45, "A": 50, "B": 30, "C": 10}.get(r.get("営業ランク", ""), 20)
 
 # ─── ルート組み立て ───────────────────────────────────────────────────────────
 
@@ -507,39 +509,46 @@ def build_gmaps_buttons(pre_plan, post_plan, appt_addr, origin_addr,
 # ─── 訪問動機サマリー ─────────────────────────────────────────────────────────
 
 def _visit_pitch(r: dict) -> str:
-    unlisted_spo = r.get("スポカフェ掲載") != "○"
-    unlisted_fan = r.get("ファンスタ掲載") != "○"
+    """訪問動機のひとことピッチ。掲載状況ベース（掲載店ほど集客意欲が高い営業先）。"""
+    spo = r.get("スポカフェ掲載") == "○"
+    fan = r.get("ファンスタ掲載") == "○"
+    plan = str(r.get("スポカフェプラン", "")).strip()
     sources = str(r.get("ソース", ""))
     genre = str(r.get("業態ジャンル", ""))
+    facility = str(r.get("スポーツ設備", "")).strip()
     rating = 0.0
     try:
         rating = float(r.get("評価") or 0)
     except (ValueError, TypeError):
         pass
-    rank = r.get("営業ランク", "")
-    if unlisted_spo and unlisted_fan and rank in ("S", "A"):
-        return "両サービス未掲載"
+
+    # 最有力：両サービス掲載（集客意欲が最も高い）
+    if spo and fan:
+        return "両サービス掲載◎"
+    # スポカフェ掲載：無料→有料転換 / 有料→上位プラン
+    if spo:
+        if plan and plan != "フリー":
+            return f"スポカフェ{plan}→上位"
+        return "スポカフェ無料→有料転換"
+    # ファンスタのみ：競合だけ掲載＝奪取の狙い目
+    if fan:
+        return "ファンスタのみ→奪取"
+    # 未掲載（コールドな新規開拓）：業態・設備・評価で訴求
     if "スポーツバー" in genre or "パブリックビューイング" in genre:
-        return "スポーツバー◎"
+        return "スポーツバー◎(未掲載)"
     if "ダーツ" in genre:
-        return "ダーツバー◎"
-    if unlisted_spo and unlisted_fan:
-        return "2サービス未掲載"
+        return "ダーツバー◎(未掲載)"
+    if facility:
+        return "観戦設備あり(未掲載)"
     if "ダーツライブ" in sources:
-        return "ダーツライブ掲載"
-    if unlisted_spo:
-        return "スポカフェ未掲載"
-    if unlisted_fan:
-        return "ファンスタ未掲載"
+        return "ダーツライブ設置(未掲載)"
     if rating >= 3.8:
-        return f"評価{rating}★"
-    if rank == "S":
-        return "Sランク店"
-    return ""
+        return f"評価{rating}★(未掲載)"
+    return "未掲載"
 
 # ─── HTML 定数・テンプレート ──────────────────────────────────────────────────
 
-RANK_COLOR = {"S": "#e74c3c", "A": "#e67e22", "B": "#3498db", "C": "#7f8c8d", "除外": "#bdc3c7"}
+RANK_COLOR = {"S": "#e74c3c", "AS": "#e67e22", "AF": "#d35400", "A": "#e67e22", "B": "#3498db", "C": "#7f8c8d", "除外": "#bdc3c7"}
 OPEN_ICON  = {"開いている可能性高": "🟢", "要確認": "🟡", "除外": "🔴"}
 
 _CSS = """
@@ -626,6 +635,9 @@ _CSS = """
   .chain-badge{display:inline-block;background:#fff3cd;color:#856404;font-size:10px;
                padding:1px 5px;border-radius:3px;border:1px solid #ffc107;margin-left:4px;
                vertical-align:middle;font-weight:bold}
+  .approx-badge{display:inline-block;background:#fef5e7;color:#b9770e;font-size:10px;
+               padding:0 5px;border-radius:3px;border:1px solid #f5d896;
+               vertical-align:middle}
   @media(max-width:768px){.manual-grid{grid-template-columns:1fr}}
   @media(max-width:768px){
     body{margin:8px;font-size:12px}
@@ -784,19 +796,20 @@ _MANUAL_HTML = """
 <div class="manual-card">
 <h3 class="manual-h3">📊 ランク・スコアの見方</h3>
 <table class="manual-tbl">
-  <tr><th>ランク</th><th>スコア</th><th>目安</th></tr>
-  <tr><td><span style="color:#e74c3c;font-weight:bold">S</span></td><td>80点〜</td><td>最優先。スポーツバー・ダーツバー等</td></tr>
-  <tr><td><span style="color:#e67e22;font-weight:bold">A</span></td><td>55〜79点</td><td>高優先。スポーツ観戦向け業態</td></tr>
-  <tr><td><span style="color:#3498db;font-weight:bold">B</span></td><td>30〜54点</td><td>候補。ダイニングバー・バー系</td></tr>
-  <tr><td><span style="color:#7f8c8d;font-weight:bold">C</span></td><td>0〜29点</td><td>低優先。カフェ等、ニーズ要確認</td></tr>
+  <tr><th>ランク</th><th>掲載状況</th><th>営業の狙い</th></tr>
+  <tr><td><span style="color:#e74c3c;font-weight:bold">S</span></td><td>スポカフェ＋ファンスタ両方掲載</td><td>最優先。集客意欲が最も高く有料転換しやすい</td></tr>
+  <tr><td><span style="color:#e67e22;font-weight:bold">A</span></td><td>どちらか片方のみ掲載</td><td>高優先。無料→有料転換／競合からの奪取</td></tr>
+  <tr><td><span style="color:#3498db;font-weight:bold">B</span></td><td>両方未掲載（有望）</td><td>新規開拓。スポーツバー・観戦設備あり等</td></tr>
+  <tr><td><span style="color:#7f8c8d;font-weight:bold">C</span></td><td>両方未掲載（温度低め）</td><td>低優先。業態・ニーズ要確認</td></tr>
 </table>
 </div>
 <div class="manual-card">
 <h3 class="manual-h3">🏷 バッジの見方</h3>
 <table class="manual-tbl">
   <tr><th>バッジ</th><th>意味</th></tr>
-  <tr><td><span style="background:#eaf6fb;color:#1a6a8a;font-size:11px;padding:1px 6px;border-radius:8px;border:1px solid #aad4e8">両サービス未掲載</span></td><td>スポカフェ・ファンスタ両方未掲載。最優先ターゲット</td></tr>
-  <tr><td><span style="background:#eaf6fb;color:#1a6a8a;font-size:11px;padding:1px 6px;border-radius:8px;border:1px solid #aad4e8">スポーツバー◎</span></td><td>スポーツバー・PV業態。訪問理由がそのままトークになる</td></tr>
+  <tr><td><span style="background:#fde8e8;color:#c0392b;font-size:11px;padding:1px 6px;border-radius:8px;border:1px solid #f5b7b1">両サービス掲載◎</span></td><td>スポカフェ・ファンスタ両方掲載。集客意欲が最も高い最優先ターゲット</td></tr>
+  <tr><td><span style="background:#eaf6fb;color:#1a6a8a;font-size:11px;padding:1px 6px;border-radius:8px;border:1px solid #aad4e8">スポカフェ無料→有料転換</span></td><td>無料掲載中。有料プランへの転換を狙える本命</td></tr>
+  <tr><td><span style="background:#eaf6fb;color:#1a6a8a;font-size:11px;padding:1px 6px;border-radius:8px;border:1px solid #aad4e8">ファンスタのみ→奪取</span></td><td>競合のみ掲載。スポカフェへの取り込みを狙う</td></tr>
   <tr><td><span style="background:#fff3cd;color:#856404;font-size:11px;padding:1px 5px;border-radius:3px;border:1px solid #ffc107;font-weight:bold">FC?</span></td><td>フリーダイヤルからチェーン・本部系の可能性あり。確定判定ではありません。</td></tr>
 </table>
 <p class="manual-note">FC? はあくまで補助表示です。訪問前に確認することをお勧めします。</p>
@@ -862,13 +875,15 @@ def _store_row_html(entry: dict, prev_addr: str, owner: str, section: str = "fre
         latlng = ""
     pitch = _visit_pitch(r)
     pitch_html = f'<br><span class="pitch-chip">{pitch}</span>' if pitch else ""
+    approx_html = ('<span class="approx-badge" title="番地が無いため地名（町名）の中心点。現地で要確認">概算位置(町名)</span>'
+                   if "概算" in str(r.get("ジオコーディング精度", "")) else "")
     chain_html = '<span class="chain-badge">FC?</span>' if r.get("chain_flag") == "チェーン疑" else ""
     return f"""
     <tr class="store-row" data-addr="{addr_esc}" data-latlng="{latlng}" data-section="{sec}" data-priority="{priority}">
       <td>{entry['time']}</td>
       <td>🚶 徒歩{entry['travel_min']}分<br><small>{entry['dist_m']}m</small></td>
       <td><a href="{ml}" target="_blank"><strong>{r['店名']}</strong></a>{chain_html}
-          <br><small class="addr">{addr}</small>
+          <br><small class="addr">{addr}</small> {approx_html}
           <br><small class="store-id">ID: {store_id}</small>{pitch_html}</td>
       <td><span style="color:{rc};font-weight:bold">{rank}</span> {oi}
           <br><small title="{sr.replace('"', "'")}">{score}点</small></td>

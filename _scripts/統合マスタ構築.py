@@ -16,7 +16,45 @@ import tempfile
 import openpyxl
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from normalize import norm_name, norm_phone, norm_address, extract_pref_city  # noqa
+import re  # noqa
+from normalize import (  # noqa
+    norm_name, norm_phone, norm_address, extract_pref_city,
+    to_halfwidth, _NAME_NOISE,
+)
+
+# 突合用：店名の先頭に付く業態接頭辞（剥がして別名キーを作る）
+_GENRE_PREFIX = re.compile(
+    r"^(スポーツバー|スポーツダイニング|スポーツカフェ|ダーツバー|ダーツ＆バー|ダーツ&バー|"
+    r"ダイニングバー|カフェ＆バー|カフェ&バー|カフェバー|ビアバー|ワインバー|"
+    r"sports?\s*bar|darts?\s*bar|bar|cafe)\s*",
+    re.IGNORECASE,
+)
+
+
+def name_keys(name: str) -> set:
+    """掲載マスタ突合用に、1つの店名から表記ゆれを吸収した複数キーを生成。
+
+    - 通常の norm_name キー
+    - 「/」「／」で区切られた各パート（例: "Deportes/デポルテス" → "deportes" も拾う）
+    - 業態接頭辞を剥がしたキー（例: "スポーツバー PAPABAMP" → "papabamp"）
+    短すぎる断片（誤マッチ源）は除外する。
+    """
+    keys = set()
+    if not name:
+        return keys
+    base = norm_name(name)
+    if base:
+        keys.add(base)
+    raw = _NAME_NOISE.sub("", to_halfwidth(name))
+    for part in re.split(r"[/／]", raw):
+        k = norm_name(part)
+        if len(k) >= 4:
+            keys.add(k)
+    stripped = _GENRE_PREFIX.sub("", to_halfwidth(name))
+    ks = norm_name(stripped)
+    if len(ks) >= 4:
+        keys.add(ks)
+    return keys
 
 ROOT = r"G:\マイドライブ\作業フォルダ2025～\Claude作業フォルダ\Claudecode スポカフェ"
 RAW = os.path.join(ROOT, "訪問店舗提案サービス", "_data", "raw")
@@ -73,8 +111,8 @@ def assign_id(phone_key: str, name_key: str, id_map: dict) -> str:
 COLUMNS = [
     "店舗ID", "店名", "業態ジャンル", "電話番号", "住所",
     "最寄駅", "営業時間", "予算", "評価", "口コミ数",
-    "HP", "SNS", "ソース",
-    "スポカフェ掲載", "ファンスタ掲載", "営業ターゲット",
+    "HP", "SNS", "ソース", "スポーツ設備",
+    "スポカフェ掲載", "スポカフェプラン", "ファンスタ掲載", "営業ターゲット",
     "緯度", "経度", "ジオコーディング精度",
     "名寄せ_電話キー", "名寄せ_店名キー",
 ]
@@ -104,6 +142,24 @@ def g(row, *keys):
     return ""
 
 
+# 食べログ「空間・設備」からスポーツ観戦の"実機材"を示すフラグを抽出。
+# 注意: この食べログ元データは「スポーツ観戦OK」で抽出済みのため『スポーツ観戦可』は
+# 全店100%に付く＝判別力ゼロ。よって基準語は除外し、実際に観戦環境の差がつく
+# 設備語（プロジェクター/大型ビジョン等）だけを加点条件とする（現データではプロジェクター22%）。
+_SPORTS_FACILITY_KW = [
+    "プロジェクター", "大型ビジョン", "大型スクリーン", "大画面", "モニター",
+    "ビジョン", "スクリーン", "DAZN", "パブリックビューイング",
+]
+
+
+def _extract_sports_facility(*texts) -> str:
+    """設備・シーン文字列群から該当キーワードを拾い、"、"区切りで返す。"""
+    blob = " ".join(t for t in texts if t)
+    found = [kw for kw in _SPORTS_FACILITY_KW if kw in blob]
+    # 重複（スクリーン⊂大型スクリーン 等）はそのまま列挙でも害はないが整理
+    return "、".join(dict.fromkeys(found))
+
+
 def from_tabelog(rows):
     out = []
     for r in rows:
@@ -120,6 +176,8 @@ def from_tabelog(rows):
             "HP": g(r, "ホームページ"),
             "SNS": g(r, "公式アカウント"),
             "ソース": "食べログ",
+            "スポーツ設備": _extract_sports_facility(
+                g(r, "空間・設備"), g(r, "利用シーン"), g(r, "サービス")),
         })
     return out
 
@@ -172,6 +230,8 @@ def load_spocafe_master(path):
     listed = {}
     i = 0
     n = len(lines)
+    # タブ区切り行の列位置: 0国 1都道府県 2その他住所 3地名 4スポーツ
+    #                       5その他 6メモ 7プラン 8ランク 9自動更新 10状態 11AC
     while i < n:
         ln = lines[i].strip()
         if ln.isdigit():  # ID行
@@ -179,10 +239,17 @@ def load_spocafe_master(path):
             tab = lines[i + 2].split("\t") if i + 2 < n else []
             pref = tab[1].strip() if len(tab) > 1 else ""
             city = tab[2].strip() if len(tab) > 2 else ""
-            key = norm_name(name)
-            if key:
-                listed[key] = {"店名": name, "都道府県": pref, "市区町村": city}
+            plan = tab[7].strip() if len(tab) > 7 else ""
+            state = tab[10].strip() if len(tab) > 10 else ""
             i += 3
+            # 状態が「掲載」のレコードのみ"掲載中"として扱う
+            #（状態空欄＝取り下げ/未公開はスポカフェ掲載とみなさない）
+            if state != "掲載":
+                continue
+            info = {"店名": name, "都道府県": pref, "市区町村": city, "プラン": plan}
+            # 表記ゆれ吸収のため複数キーで登録（先勝ち＝完全一致キーを優先）
+            for key in name_keys(name):
+                listed.setdefault(key, info)
         else:
             i += 1
     return listed
@@ -193,9 +260,9 @@ def load_fansta_master(path):
     listed = {}
     for r in rows:
         name = g(r, "店舗名")
-        key = norm_name(name)
-        if key:
-            listed[key] = {"店名": name, "電話": norm_phone(g(r, "電話番号"))}
+        info = {"店名": name, "電話": norm_phone(g(r, "電話番号"))}
+        for key in name_keys(name):
+            listed.setdefault(key, info)
     return listed
 
 
@@ -224,7 +291,8 @@ def merge(records):
         else:
             target["ソース"].add(rec["ソース"])
             for col in ["業態ジャンル", "電話番号", "住所", "最寄駅",
-                        "営業時間", "予算", "評価", "口コミ数", "HP", "SNS"]:
+                        "営業時間", "予算", "評価", "口コミ数", "HP", "SNS",
+                        "スポーツ設備"]:
                 if not target.get(col) and rec.get(col):
                     target[col] = rec[col]
         if pk:
@@ -262,10 +330,16 @@ def main():
         e["店舗ID"] = assign_id(pk, nk, id_map)
         nk = norm_name(e["店名"])
         pk = norm_phone(e["電話番号"])
-        e["スポカフェ掲載"] = "○" if nk in spocafe else ""
-        in_fansta = nk in fansta or (pk and any(f.get("電話") == pk for f in fansta.values()))
+        rec_keys = name_keys(e["店名"])
+        spo_hit = rec_keys & spocafe.keys()
+        e["スポカフェ掲載"] = "○" if spo_hit else ""
+        # 掲載中ならプランも保持（フリー＝無料掲載＝有料転換の営業先）
+        e["スポカフェプラン"] = spocafe[next(iter(spo_hit))]["プラン"] if spo_hit else ""
+        in_fansta = bool(rec_keys & fansta.keys()) or (
+            pk and any(f.get("電話") == pk for f in fansta.values()))
         e["ファンスタ掲載"] = "○" if in_fansta else ""
-        e["営業ターゲット"] = "" if (e["スポカフェ掲載"] or e["ファンスタ掲載"]) else "★"
+        # 掲載店（集客意欲あり＝有料転換/奪取の営業先）に★。未掲載はコールド。
+        e["営業ターゲット"] = "★" if (e["スポカフェ掲載"] or e["ファンスタ掲載"]) else ""
         e["緯度"] = ""
         e["経度"] = ""
         e["ジオコーディング精度"] = ""
