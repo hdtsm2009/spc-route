@@ -141,6 +141,13 @@ def get_score(r: dict) -> int:
             pass
     return {"S": 70, "AS": 50, "AF": 45, "A": 50, "B": 30, "C": 10}.get(r.get("営業ランク", ""), 20)
 
+
+# ランク優先度（S→AS→AF→B→C）。スコアより先に効かせ、ASが必ずAFより上に来るようにする。
+RANK_ORDER = {"S": 0, "AS": 1, "AF": 2, "A": 2, "B": 3, "C": 4, "除外": 9}
+
+def rank_order(r: dict) -> int:
+    return RANK_ORDER.get(str(r.get("営業ランク", "")).strip(), 5)
+
 # ─── ルート組み立て ───────────────────────────────────────────────────────────
 
 def _fill_block(start_min, end_min, cur_lat, cur_lng,
@@ -432,6 +439,14 @@ def resolve_origin(stores, body, cfg=None):
     text = (body.get("origin_text") or "").strip()
     if not text:
         return None
+    # 「○○駅」「△△丁目」など駅名・住所っぽい入力は、店名の部分一致より先にジオコーディングする
+    # （例:「新宿駅」が店名「HUB西武新宿駅前店」に誤マッチして起点が店になるのを防ぐ）
+    prefer_geo = text.endswith("駅") or ("丁目" in text)
+    if prefer_geo and _geo:
+        g = _geo.geocode(text)
+        if g:
+            g["source"] = "geocode"
+            return g
     hit = _match_store_origin(stores, text)
     if hit:
         return hit

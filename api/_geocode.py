@@ -12,6 +12,25 @@ import urllib.request
 _API = "https://msearch.gsi.go.jp/address-search/AddressSearch"
 
 
+def _select_feature(data, q):
+    """GSIは結果を行政コード順で返すため data[0] が最適とは限らない。
+    駅名・地名は地方の同名地（例「新宿三丁目駅」→群馬県前橋市新宿）に誤解決しやすいので、
+    クエリと完全一致するタイトルを最優先で選ぶ。"""
+    qn = (q or "").replace(" ", "").replace("　", "")
+    if not qn:
+        return data[0]
+    exact = [f for f in data
+             if f.get("properties", {}).get("title", "").replace(" ", "") == qn]
+    if exact:
+        return exact[0]
+    # クエリ全体（「○○駅」等）を含むタイトルがあれば、最も短い＝余計な接頭辞が少ないものを選ぶ
+    contains = [f for f in data
+                if qn in f.get("properties", {}).get("title", "").replace(" ", "")]
+    if contains:
+        return min(contains, key=lambda f: len(f.get("properties", {}).get("title", "")))
+    return data[0]
+
+
 def geocode(query: str):
     """住所・駅名・地名 → 座標。失敗時 None。
     国土地理院APIは「○○駅」も住所も検索可能。"""
@@ -27,7 +46,7 @@ def geocode(query: str):
         return None
     if not data:
         return None
-    feat = data[0]
+    feat = _select_feature(data, q)
     try:
         lng, lat = feat["geometry"]["coordinates"]
     except (KeyError, ValueError, TypeError):

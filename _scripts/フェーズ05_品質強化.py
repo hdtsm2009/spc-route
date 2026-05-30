@@ -199,17 +199,33 @@ def main():
     rows = list(csv.DictReader(open(in_csv, encoding="utf-8-sig")))
     print(f"入力: {len(rows)} 件")
 
-    # スポカフェ掲載店の地名概算補完（フェーズ04b の出力）を取り込む
-    suppl_csv = os.path.join(BASE, "_output", "補完_スポカフェ掲載店.csv")
-    if os.path.exists(suppl_csv):
-        suppl = list(csv.DictReader(open(suppl_csv, encoding="utf-8-sig")))
-        # geocoded.csv に無い列は補完側にも空で揃える
-        base_cols = set(rows[0].keys()) if rows else set()
+    # スポカフェ掲載店の補完を取り込む。
+    #   POI(04c, 精度A・実座標) を優先し、POIで取れなかった店だけ地名概算(04b, B) で補う。
+    base_cols = set(rows[0].keys()) if rows else set()
+    suppl_files = [
+        ("POI", os.path.join(BASE, "_output", "補完_スポカフェ掲載店_POI.csv")),
+        ("地名概算", os.path.join(BASE, "_output", "補完_スポカフェ掲載店.csv")),
+    ]
+    seen_ids = set()
+    added = 0
+    for label, path in suppl_files:
+        if not os.path.exists(path):
+            continue
+        suppl = list(csv.DictReader(open(path, encoding="utf-8-sig")))
+        kept = []
         for s in suppl:
+            sid = s.get("店舗ID", "")
+            if sid and sid in seen_ids:
+                continue  # 既にPOIで採用済み → 地名概算はスキップ
+            seen_ids.add(sid)
             for c in base_cols:
                 s.setdefault(c, "")
-        rows.extend(suppl)
-        print(f"  ＋スポカフェ掲載店補完(地名概算): {len(suppl)} 件 → 計 {len(rows)} 件")
+            kept.append(s)
+        rows.extend(kept)
+        added += len(kept)
+        print(f"  ＋スポカフェ掲載店補完({label}): {len(kept)} 件")
+    if added:
+        print(f"  → 補完合計 {added} 件 / 計 {len(rows)} 件")
 
     # geo_quality を A/B/C/NG に改訂 + スコア計算
     for r in rows:

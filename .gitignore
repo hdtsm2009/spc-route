@@ -10,9 +10,14 @@ _output/統合店舗マスタ.csv
 _output/統合店舗マスタ_geocoded.csv
 _output/統合店舗マスタ_v2.csv
 _output/補完_スポカフェ掲載店.csv
+_output/補完_スポカフェ掲載店_POI.csv
+
+# APIキー（ローカル専用・絶対にコミットしない）
+_config/google_places_key.local
 
 # ジオコードキャッシュ
 _data/geocode_cache.json
+_data/places_cache.json
 
 # 元データ（生データ）
 _data/raw/

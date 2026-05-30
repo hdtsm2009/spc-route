@@ -76,7 +76,7 @@ class handler(BaseHTTPRequestHandler):
             self._json(500, {"error": f"候補抽出エラー: {e}"})
             return
 
-        cands.sort(key=lambda r: (-G.get_score(r), r.get("_dist_m", 1 << 30)))
+        cands.sort(key=lambda r: (G.rank_order(r), -G.get_score(r), r.get("_dist_m", 1 << 30)))
         cands = cands[:limit]
 
         out = []
