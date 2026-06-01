@@ -1,0 +1,15 @@
+{
+  "_comment": "L3=Web独立確認(WebSearch)の人手判定。キー=店名(L1L2 CSVの店名と一致)。2026-06-01確認。",
+  "京都串処東屋":                  {"verdict": "営業中疑い", "note": "公式azumaya-dining.com・食べログ・スポカフェページ生存。同名別支店(三条/木屋町)誤検出の疑い", "src": "https://azumaya-dining.com/info/"},
+  "スポーツカフェ 雪の窯珈琲":      {"verdict": "閉店確定", "date": "2026-04-14", "note": "号外NET江戸川区で閉店報道", "src": "https://edogawa.goguynet.jp/2026/04/10/yukinokama-coffee-2/"},
+  "マンガ・ネット館 秋葉原店":      {"verdict": "閉店確定", "date": "2023-05-08", "note": "13年営業し閉店", "src": "https://akiba-pc.watch.impress.co.jp/docs/news/news/1493896.html"},
+  "快活CLUB　町田忠生店":          {"verdict": "閉店確定", "date": "2024-04-01", "note": "店舗統合で閉店・跡地FiT24", "src": "https://machida.goguynet.jp/2024/04/13/kaikatsuclub-2/"},
+  "アプレシオ　サンライズ蒲田店":  {"verdict": "閉店確定", "date": "2024-05-13", "note": "ビル老朽化・賃貸契約終了", "src": "https://ootaku2shin.com/archives/25352119.html"},
+  "九龍 戦闘市街区":               {"verdict": "閉店確定", "date": "2026-03-31", "note": "屋内サバゲー施設閉店", "src": "https://kowlooncity0801.com/"},
+  "ASOBIBA　秋葉原フィールド":     {"verdict": "閉店確定", "date": "2024-02-25", "note": "ビル再開発・解体で閉店", "src": "https://asobiba-tokyo.com/94911"},
+  "TGI FRIDAYS 五反田店":          {"verdict": "閉店確定", "date": "2023-03-31", "note": "食べログ[Closed]", "src": "https://tabelog.com/en/tokyo/A1316/A131603/13196650/"},
+  "HUB 名古屋伏見店":              {"verdict": "閉店確定", "date": "2020-12-31", "note": "閉店", "src": "https://kaiten-heiten.com/hub-nagoya-fushimi/"},
+  "HUB 六本木2号店":               {"verdict": "閉店確定", "date": "2020-09-30", "note": "公式FB閉店告知", "src": "https://m.facebook.com/hub82/posts/3625072920870548/"},
+  "DRUNK BEARS NU茶屋町店":        {"verdict": "閉店確定", "note": "食べログ閉店", "src": "https://tabelog.com/en/osaka/A2701/A270101/27007591/"},
+  "HUB なんばダ・オーレ店":        {"verdict": "閉店確定", "date": "2021-06-30", "note": "公式Xで最終日告知", "src": "https://x.com/HUB_82/status/1408605670836883458"}
+}

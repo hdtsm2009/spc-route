@@ -76,7 +76,13 @@ class handler(BaseHTTPRequestHandler):
             self._json(500, {"error": f"候補抽出エラー: {e}"})
             return
 
-        cands.sort(key=lambda r: (G.rank_order(r), -G.get_score(r), r.get("_dist_m", 1 << 30)))
+        def _mom(r):
+            try:
+                return int(float(r.get("勢いスコア") or 0))
+            except (ValueError, TypeError):
+                return 0
+        # ランク(S→AS→AF→B→C) → 勢いスコア(本命度の2次軸) → 営業スコア → 近い順
+        cands.sort(key=lambda r: (G.rank_order(r), -_mom(r), -G.get_score(r), r.get("_dist_m", 1 << 30)))
         cands = cands[:limit]
 
         out = []
@@ -94,6 +100,10 @@ class handler(BaseHTTPRequestHandler):
                 "lng":          lng,
                 "rank":         r.get("営業ランク", ""),
                 "score":        G.get_score(r),
+                "momentum":     _mom(r),
+                "rating":       r.get("評価", ""),
+                "reviews":      r.get("口コミ数", ""),
+                "price":        r.get("予算", "") if str(r.get("予算", "")).startswith("¥") else "",
                 "score_reason": r.get("スコア理由", ""),
                 "genre":        r.get("業態ジャンル", ""),
                 "pitch":        G._visit_pitch(r),

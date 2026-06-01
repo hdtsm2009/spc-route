@@ -18,6 +18,17 @@ _config/google_places_key.local
 # ジオコードキャッシュ
 _data/geocode_cache.json
 _data/places_cache.json
+_data/places_enrich_cache.json
+_data/places_verify_cache.json
+_data/places_regeocode_cache.json
+
+# 検証・エンリッチの中間出力（ローカル専用）
+_output/_test_*.csv
+_output/_閉店検証_*.csv
+_output/_誤検出再ジオコーディング_*.csv
+
+# スポカフェ向け納品物（個別店舗データ・非公開）
+_納品_*/
 
 # 元データ（生データ）
 _data/raw/

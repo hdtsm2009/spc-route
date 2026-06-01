@@ -87,6 +87,8 @@ a:hover{text-decoration:underline}
 .cc-genre{font-size:11px;background:#eef1f6;color:#556;padding:2px 9px;border-radius:10px}
 .cc-pitch{font-size:11px;background:#eaf6fb;color:#1a6a8a;border:1px solid #aad4e8;padding:2px 9px;border-radius:10px;font-weight:bold}
 .cc-pitch.hot{background:#fff3e0;color:#d35400;border-color:#f5cba7}
+.cc-mom{font-size:11px;background:#f4f6f8;color:#566;border:1px solid #dde3ea;padding:2px 9px;border-radius:10px;cursor:help}
+.cc-mom.hot{background:#fff6e8;color:#c0531a;border-color:#f3c98f;font-weight:bold}
 .cc-chain{font-size:11px;background:#f3e8fb;color:#8e44ad;padding:2px 9px;border-radius:10px}
 .cc-meta{margin:8px 0 0;padding-left:29px;display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;font-size:12px;color:#999}
 .cc-addr{flex:1;min-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -107,6 +109,11 @@ a:hover{text-decoration:underline}
 .guide-note{font-size:12px;color:#555;background:#f4f8fb;border-left:3px solid #aad4e8;
             padding:8px 12px;border-radius:0 4px 4px 0;margin:12px 0 0}
 .guide-link{font-size:13px;display:inline-block;margin-top:10px}
+.changelog{list-style:none;padding:0;margin:0;font-size:13px}
+.changelog li{padding:9px 0;border-bottom:1px solid #eef1f4;line-height:1.6}
+.changelog li:last-child{border-bottom:none}
+.cl-date{display:inline-block;background:#eef1f6;color:#5a6b7b;font-size:11px;font-weight:bold;
+         padding:1px 8px;border-radius:10px;margin-right:8px}
 
 /* プラン一覧 */
 table{border-collapse:collapse;width:100%}
@@ -150,6 +157,29 @@ tr:hover td{background:#f8f9fa}
       掲載状況で決まり、並び順は <strong>S→AS→AF→B→C</strong>。「両サービス掲載◎」の店が最有力です。
     </p>
     <a class="guide-link" href="/guide.html" target="_blank">▶ 仕組み・店舗選定基準・ルート算出ロジックの詳しい解説はこちら</a>
+  </div>
+</details>
+
+<!-- ── 更新履歴 ── -->
+<details class="guide">
+  <summary>🆕 更新履歴（大きめの改善）</summary>
+  <div class="guide-body">
+    <ul class="changelog">
+      <li><span class="cl-date">2026-06-01</span>
+        <strong>本命度の精度向上＋閉店店の除外</strong><br>
+        スポカフェ掲載店に集客力データ（★評価・口コミ数・価格帯）を追加し、
+        <strong>AS（無料掲載＝有料転換の本命）を“勢いの強い順”に並べ替え</strong>。
+        カードに勢いチップを表示。Google上で閉店・移転が確認された店を候補から自動除外しました。</li>
+      <li><span class="cl-date">2026-05-30</span>
+        <strong>掲載店の住所を地図に補完</strong><br>
+        番地のないスポカフェ掲載店をPOIで地図表示（「概算位置」バッジ付き）。</li>
+      <li><span class="cl-date">2026-05-30</span>
+        <strong>ランクをAS / AFに細分化</strong><br>
+        スポカフェのみ掲載＝AS、ファンスタのみ掲載＝AF に分け、本命が分かりやすく。</li>
+      <li><span class="cl-date">2026-05-30</span>
+        <strong>候補選択をカード型UIに刷新・2ステップ化</strong><br>
+        「店を選ぶ → ルート作成」の2ステップに整理し、ルートを最適化。</li>
+    </ul>
   </div>
 </details>
 
@@ -390,12 +420,33 @@ function validPhone(p){
 }
 function validUrl(u){ return u && /^https?:\/\//.test(String(u)); }
 
+function fmtReviews(n){
+  const v = parseInt(String(n).replace(/[^0-9]/g,''), 10);
+  if(!v) return '';
+  return v >= 1000 ? (v/1000).toFixed(1).replace(/\.0$/,'') + 'k' : String(v);
+}
+function momChip(c){
+  // 勢い（集客力・規模）の根拠を見せる：★評価・口コミ数・価格帯
+  const rating = parseFloat(c.rating) || 0;
+  const rev = fmtReviews(c.reviews);
+  if(!rating && !rev && !c.price) return '';
+  const parts = [];
+  if(rating) parts.push('★' + rating);
+  if(rev)    parts.push('口' + rev);
+  if(c.price) parts.push(esc(c.price));
+  const hot = (c.momentum || 0) >= 60 ? ' hot' : '';
+  const fire = (c.momentum || 0) >= 60 ? '🔥' : '';
+  return `<span class="cc-mom${hot}" title="勢いスコア ${esc(c.momentum||0)}（評価×口コミ×価格帯）">${fire}${parts.join('・')}</span>`;
+}
 function cardHtml(c){
   const r    = rankOf(c);
   const sel  = SELECTED.has(c.id);
   const dist = c.dist_m ? `${Math.round(c.dist_m)}m` : '';
+  // 本命（S＝両方掲載 / AS＝スポカフェ無料→有料転換）はpitchをhot強調
+  const isHonmei = (r === 'S' || r === 'AS');
   const pitch = c.pitch
-    ? `<span class="cc-pitch ${(c.pitch||'').indexOf('両サービス掲載')===0?'hot':''}">${esc(c.pitch)}</span>` : '';
+    ? `<span class="cc-pitch ${isHonmei?'hot':''}">${esc(c.pitch)}</span>` : '';
+  const mom   = momChip(c);
   const genre = c.genre ? `<span class="cc-genre">${esc(c.genre)}</span>` : '';
   const chain = c.chain ? `<span class="cc-chain">チェーン疑</span>` : '';
   const mapUrl = `https://www.google.com/maps/search/?api=1&query=${c.lat},${c.lng}`;
@@ -411,7 +462,7 @@ function cardHtml(c){
         <span class="cc-dist">${dist}</span>
         <span class="cc-open">${openLabel(c.open_status)}</span>
       </div>
-      <div class="cc-tags">${pitch}${genre}${chain}</div>
+      <div class="cc-tags">${pitch}${mom}${genre}${chain}</div>
       <div class="cc-meta">
         <span class="cc-addr">📍 ${esc(c.addr || '住所情報なし')}${c.approx?' <span class="cc-approx" title="番地が無いため地名（町名）の中心点で表示。現地で要確認">概算位置(町名)</span>':''}</span>
         <span class="cc-links">${links}</span>
