@@ -82,23 +82,30 @@ def _min2t(m: int) -> str:
 # ─── 候補絞り込み ─────────────────────────────────────────────────────────────
 
 def check_open(hours_str: str, ws: str, we: str) -> str:
+    """営業時間と検索ウィンドウ[ws,we]が実際に重なる営業区間を持つか判定。
+    「11:00-15:00, 17:00-23:00」のような中抜けや「17:00-翌2:00」の深夜跨ぎを正しく扱う。"""
     if not hours_str or hours_str.strip() in ("", "情報なし"):
         return "要確認"
     h = unicodedata.normalize("NFKC", hours_str)
     if any(kw in h for kw in ["定休", "閉店", "営業なし"]):
         return "要確認"
-    start_h = int(ws.split(":")[0])
-    end_h = int(we.split(":")[0])
-    hours_found = [int(hh) for hh, _ in re.findall(r"(\d{1,2})[：:時](\d{0,2})", h)
-                   if hh.isdigit()]
-    if not hours_found:
+    wstart, wend = _t2min(ws), _t2min(we)
+    # 「H:MM-H:MM」「H時-H時」等の営業区間をすべて抽出
+    ranges = []
+    for m in re.finditer(r"(\d{1,2})(?::|時)?(\d{2})?\s*[~〜～\-―ー]\s*(翌\s*日?)?\s*(\d{1,2})(?::|時)?(\d{2})?", h):
+        s = int(m.group(1)) * 60 + int(m.group(2) or 0)
+        e = int(m.group(4)) * 60 + int(m.group(5) or 0)
+        if m.group(3) or e <= s:
+            e += 24 * 60  # 翌日跨ぎ（例 17:00-翌2:00 / 17:00-2:00）
+        ranges.append((s, e))
+    if not ranges:
         return "要確認"
-    open_h, close_h = min(hours_found), max(hours_found)
-    if close_h <= 5:
-        close_h += 24
-    if close_h <= start_h or open_h >= end_h:
-        return "除外"
-    return "開いている可能性高"
+    # いずれかの営業区間がウィンドウと重なれば営業中見込み（深夜跨ぎは±24hシフトも確認）
+    for s, e in ranges:
+        for off in (0, 24 * 60):
+            if s - off < wend and e - off > wstart:
+                return "開いている可能性高"
+    return "除外"
 
 
 def filter_candidates(rows, origin_lat, origin_lng, radius_m,
@@ -140,6 +147,14 @@ def get_score(r: dict) -> int:
         except (ValueError, TypeError):
             pass
     return {"S": 70, "AS": 50, "AF": 45, "A": 50, "B": 30, "C": 10}.get(r.get("営業ランク", ""), 20)
+
+
+def get_momentum(r: dict) -> int:
+    """勢いスコア（評価×口コミ×価格帯）。同一ランク内の本命度の2次ソートキー。"""
+    try:
+        return int(float(r.get("勢いスコア") or 0))
+    except (ValueError, TypeError):
+        return 0
 
 
 # ランク優先度（S→AS→AF→B→C）。スコアより先に効かせ、ASが必ずAFより上に来るようにする。
@@ -191,7 +206,8 @@ def build_free_route(candidates, origin_lat, origin_lng,
                      window_start, window_end, max_stores,
                      return_to_origin, route_cfg):
     speed = route_cfg["walk_speed_m_per_min"]
-    pool = sorted(candidates, key=lambda r: (-get_score(r), r["_dist_m"]))
+    # ランク(S→AS→AF→B→C) → 勢いスコア → 営業スコア → 近い順（候補画面と同じ本命度順）
+    pool = sorted(candidates, key=lambda r: (rank_order(r), -get_momentum(r), -get_score(r), r["_dist_m"]))
     used = set()
     cfg_copy = dict(route_cfg)
     cfg_copy["_budget"] = max_stores

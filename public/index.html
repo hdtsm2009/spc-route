@@ -28,7 +28,10 @@ a:hover{text-decoration:underline}
 .gen-field select,.gen-field input{padding:7px 10px;border:1px solid #ccc;border-radius:4px;
   font-size:13px;background:#fff;min-width:120px}
 .gen-field input.wide{min-width:260px}
-.preset-chips{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 12px}
+.preset-chips{display:flex;flex-wrap:wrap;gap:6px 14px;margin:2px 0 12px;align-items:center}
+.preset-group{display:inline-flex;flex-wrap:wrap;gap:6px;align-items:center}
+.pg-label{font-size:11px;color:#90a;background:#f3eefa;border:1px solid #e3d6f0;border-radius:4px;
+          padding:2px 7px;color:#7a5a9a;font-weight:bold}
 .chip{padding:5px 11px;background:#eef1f6;border:1px solid #d6dde8;border-radius:14px;
       font-size:12px;cursor:pointer;color:#2c3e50}
 .chip:hover{background:#dde6f0}
@@ -66,6 +69,10 @@ a:hover{text-decoration:underline}
 .rf-chip.on.rf-B{background:#e8f2fb;color:#3498db;border-color:#aed6f1}
 .rf-chip.on.rf-C{background:#eef0f1;color:#7f8c8d;border-color:#d5dbdb}
 .cand-count{font-size:13px;color:#2c3e50;font-weight:bold;white-space:nowrap}
+.filter-chk{font-size:12px;color:#556;display:inline-flex;align-items:center;gap:3px;cursor:pointer;white-space:nowrap}
+.cand-summary{margin-top:10px;padding:9px 13px;background:#f3fbf6;border:1px solid #b8e0c8;
+              border-radius:6px;font-size:12.5px;color:#1e6e43;display:none}
+.cand-summary strong{color:#16633a}
 .cand-list{max-height:560px;overflow:auto;display:flex;flex-direction:column;gap:8px;padding:2px}
 .cand-card{border:1px solid #e3e8ef;border-radius:8px;padding:11px 13px;cursor:pointer;background:#fff;transition:.12s}
 .cand-card:hover{border-color:#b9c5d4;box-shadow:0 1px 6px rgba(0,0,0,.07)}
@@ -266,14 +273,23 @@ tr:hover td{background:#f8f9fa}
       <a onclick="selectAll(true)">すべて選択</a>
       <a onclick="selectAll(false)">すべて解除</a>
       <select id="cand-sort" onchange="renderCandidates()">
-        <option value="score">スコア順</option>
+        <option value="score">本命度順</option>
         <option value="dist">近い順</option>
       </select>
+      <select id="filter-dist" onchange="renderCandidates()" title="起点からの徒歩時間でしぼり込み">
+        <option value="">距離: 全て</option>
+        <option value="400">徒歩5分以内</option>
+        <option value="800">徒歩10分以内</option>
+        <option value="1200">徒歩15分以内</option>
+      </select>
+      <label class="filter-chk"><input type="checkbox" id="filter-open" onchange="renderCandidates()">🟢営業中のみ</label>
+      <label class="filter-chk"><input type="checkbox" id="filter-nochain" onchange="renderCandidates()">チェーン除く</label>
       <span class="rank-filter" id="rank-filter"></span>
     </div>
     <span class="cand-count" id="cand-count"></span>
   </div>
   <div class="cand-list" id="cand-list"></div>
+  <div class="cand-summary" id="cand-summary"></div>
   <div style="margin-top:14px">
     <button class="btn btn-go" id="route-btn" onclick="generatePlan()">🗺 選んだ店でルート作成</button>
   </div>
@@ -300,20 +316,20 @@ tr:hover td{background:#f8f9fa}
 // 主要駅は座標を埋め込み、ジオコーダーを経由せず lat/lng を直接渡す
 // （国土地理院APIは「渋谷駅」等を誤った地方に解決するため）
 const PRESETS = [
-  {label:'新宿',   lat:35.690921, lng:139.700258},
-  {label:'渋谷',   lat:35.658034, lng:139.701636},
-  {label:'上野',   lat:35.713768, lng:139.777254},
-  {label:'横浜',   lat:35.465786, lng:139.622313},
-  {label:'池袋',   lat:35.728926, lng:139.710380},
-  {label:'六本木', lat:35.662836, lng:139.731272},
-  {label:'梅田',   lat:34.702485, lng:135.495951},
-  {label:'銀座',   lat:35.671990, lng:139.763965},
-  {label:'秋葉原', lat:35.698353, lng:139.773114},
-  {label:'なんば', lat:34.666340, lng:135.500956},
-  {label:'名古屋', lat:35.170915, lng:136.881537},
-  {label:'神戸',   lat:34.694746, lng:135.197764},
-  {label:'天王寺', lat:34.646805, lng:135.514099},
-  {label:'福岡',   lat:33.589828, lng:130.420681},
+  {label:'新宿',   lat:35.690921, lng:139.700258, group:'首都圏'},
+  {label:'渋谷',   lat:35.658034, lng:139.701636, group:'首都圏'},
+  {label:'上野',   lat:35.713768, lng:139.777254, group:'首都圏'},
+  {label:'池袋',   lat:35.728926, lng:139.710380, group:'首都圏'},
+  {label:'六本木', lat:35.662836, lng:139.731272, group:'首都圏'},
+  {label:'銀座',   lat:35.671990, lng:139.763965, group:'首都圏'},
+  {label:'秋葉原', lat:35.698353, lng:139.773114, group:'首都圏'},
+  {label:'横浜',   lat:35.465786, lng:139.622313, group:'首都圏'},
+  {label:'梅田',   lat:34.702485, lng:135.495951, group:'関西'},
+  {label:'なんば', lat:34.666340, lng:135.500956, group:'関西'},
+  {label:'天王寺', lat:34.646805, lng:135.514099, group:'関西'},
+  {label:'神戸',   lat:34.694746, lng:135.197764, group:'関西'},
+  {label:'名古屋', lat:35.170915, lng:136.881537, group:'その他'},
+  {label:'福岡',   lat:33.589828, lng:130.420681, group:'その他'},
 ];
 
 let LAST_ORIGIN = null;     // {lat,lng,title,source}
@@ -326,8 +342,14 @@ function esc(s){
 }
 
 function renderPresets(){
+  const groups = [];
+  PRESETS.forEach((p, i) => {
+    let g = groups.find(x => x.name === p.group);
+    if(!g){ g = {name:p.group, items:[]}; groups.push(g); }
+    g.items.push(`<span class="chip" onclick="setPreset(${i})">${esc(p.label)}</span>`);
+  });
   document.getElementById('preset-chips').innerHTML =
-    PRESETS.map((p, i) => `<span class="chip" onclick="setPreset(${i})">${esc(p.label)}</span>`).join('');
+    groups.map(g => `<span class="preset-group"><span class="pg-label">${esc(g.name)}</span>${g.items.join('')}</span>`).join('');
 }
 function setPreset(i){
   const p = PRESETS[i];
@@ -438,6 +460,15 @@ function momChip(c){
   const fire = (c.momentum || 0) >= 60 ? '🔥' : '';
   return `<span class="cc-mom${hot}" title="勢いスコア ${esc(c.momentum||0)}（評価×口コミ×価格帯）">${fire}${parts.join('・')}</span>`;
 }
+function honmeiLabel(c){
+  // 生スコアの代わりに「本命度」を語彙で表示（数値は ⓘ ツールチップに退避）
+  const r = rankOf(c);
+  if(r === 'S')  return '最優先';
+  if(r === 'AS') return (c.momentum||0) >= 60 ? '本命◎(無料→有料)' : '本命(無料→有料)';
+  if(r === 'AF') return '奪取狙い';
+  if(r === 'B')  return '新規開拓';
+  return '様子見';
+}
 function cardHtml(c){
   const r    = rankOf(c);
   const sel  = SELECTED.has(c.id);
@@ -466,7 +497,7 @@ function cardHtml(c){
       <div class="cc-meta">
         <span class="cc-addr">📍 ${esc(c.addr || '住所情報なし')}${c.approx?' <span class="cc-approx" title="番地が無いため地名（町名）の中心点で表示。現地で要確認">概算位置(町名)</span>':''}</span>
         <span class="cc-links">${links}</span>
-        <span class="cc-score" title="${esc(c.score_reason || 'スコア内訳なし')}">スコア ${esc(c.score)} ⓘ</span>
+        <span class="cc-score" title="${esc((c.score_reason || 'スコア内訳なし') + '（営業スコア ' + c.score + ' / 勢い ' + (c.momentum||0) + '）')}">本命度: ${honmeiLabel(c)} ⓘ</span>
       </div>
     </div>`;
 }
@@ -486,10 +517,17 @@ function renderCandidates(){
     updateCount();
     return;
   }
-  // ランク絞り込み
+  // 絞り込み（ランク／距離／営業中／チェーン）
+  const maxDist  = parseInt(document.getElementById('filter-dist').value, 10) || 0;
+  const openOnly = document.getElementById('filter-open').checked;
+  const noChain  = document.getElementById('filter-nochain').checked;
   let disp = LAST_CANDIDATES.filter(c => {
     const r = rankOf(c);
-    return RANK_KEYS.includes(r) ? RANK_ON[r] : true;
+    if(RANK_KEYS.includes(r) && !RANK_ON[r]) return false;
+    if(maxDist && (c.dist_m || 0) > maxDist) return false;
+    if(openOnly && c.open_status !== '開いている可能性高') return false;
+    if(noChain && c.chain) return false;
+    return true;
   });
   // 並び替え
   if(document.getElementById('cand-sort').value === 'dist'){
@@ -522,6 +560,35 @@ function selectedIds(){ return Array.from(SELECTED); }
 function updateCount(){
   const shown = document.querySelectorAll('#cand-list .cand-card').length;
   document.getElementById('cand-count').textContent = `選択中 ${SELECTED.size}件 ／ 表示 ${shown}件`;
+  renderSummary();
+}
+function hav(a1,o1,a2,o2){
+  const R=6371000, t=Math.PI/180;
+  const dLa=(a2-a1)*t, dLo=(o2-o1)*t;
+  const x=Math.sin(dLa/2)**2 + Math.cos(a1*t)*Math.cos(a2*t)*Math.sin(dLo/2)**2;
+  return 2*R*Math.asin(Math.sqrt(x));
+}
+// 選択中の合計サマリー（件数・本命数・推定周遊時間・総移動距離）。地図なしでD5を可視化
+function renderSummary(){
+  const bar = document.getElementById('cand-summary');
+  const sel = LAST_CANDIDATES.filter(c => SELECTED.has(c.id));
+  if(!sel.length){ bar.style.display='none'; bar.innerHTML=''; return; }
+  bar.style.display='';
+  const honmei = sel.filter(c => { const r=rankOf(c); return r==='S'||r==='AS'; }).length;
+  const speed=80, stay=15;
+  let totalM=0;
+  if(LAST_ORIGIN){
+    let cl=LAST_ORIGIN.lat, cg=LAST_ORIGIN.lng, rest=sel.slice();
+    while(rest.length){
+      let bi=0, bd=Infinity;
+      rest.forEach((c,i)=>{ const d=hav(cl,cg,c.lat,c.lng); if(d<bd){bd=d;bi=i;} });
+      totalM+=bd; cl=rest[bi].lat; cg=rest[bi].lng; rest.splice(bi,1);
+    }
+  }
+  const walk=Math.round(totalM/speed), total=walk+stay*sel.length, km=(totalM/1000).toFixed(1);
+  bar.innerHTML = `🧮 <strong>選択 ${sel.length}件</strong>（本命S/AS <strong>${honmei}</strong>件）`
+    + ` ・ 推定周遊 <strong>約${total}分</strong>（徒歩${walk}分＋滞在${stay}分×${sel.length}）`
+    + ` ・ 総移動 約${km}km`;
 }
 
 // ── STEP 2: ルート作成 ──

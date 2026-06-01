@@ -110,6 +110,7 @@ def build_regeo_override():
             "lat": r["新緯度"], "lng": r["新経度"],
             "rating": r.get("評価", ""), "reviews": r.get("口コミ数", ""),
             "closed": r["営業状況"] in ("CLOSED_PERMANENTLY", "CLOSED_TEMPORARILY"),
+            "店名": r["店名"], "住所": r.get("採用住所", ""), "プラン": r.get("プラン", ""),
         }
     return m
 
@@ -175,6 +176,44 @@ def main():
             r["除外理由"] = (r.get("除外理由", "") + " / " if r.get("除外理由") else "") + falsepos[sid]
             n_fp += 1
 
+    # 再ジオ確度『高』かつ営業中の店を復活。同名の既存行があれば上書き復活、無ければ新規追加。
+    existing = {r.get("店舗ID", "") for r in rows}
+    by_name = {}
+    for r in rows:
+        by_name.setdefault(r.get("店名", ""), r)
+    n_added = 0
+    for sid, rg in regeo.items():
+        if rg["closed"] or sid in existing or not rg.get("店名"):
+            continue
+        mom = momentum(rg["rating"], rg["reviews"], "")
+        ex = by_name.get(rg["店名"])
+        if ex is not None:
+            # 既存（誤検出で除外された）行を正しい座標で復活
+            ex.update({
+                "緯度": rg["lat"], "経度": rg["lng"],
+                "営業ランク": "AS", "営業スコア": 120 + mom, "勢いスコア": mom,
+                "除外理由": "", "geo_quality": "A", "ジオコーディング精度": "詳細(POI再取得)",
+            })
+            if rg["rating"]:
+                ex["評価"] = rg["rating"]
+            if rg["reviews"]:
+                ex["口コミ数"] = rg["reviews"]
+            n_revived += 1
+            continue
+        new = {fn: "" for fn in fieldnames}
+        new.update({
+            "店舗ID": sid, "店名": rg["店名"], "住所": rg["住所"],
+            "緯度": rg["lat"], "経度": rg["lng"],
+            "営業ランク": "AS", "営業スコア": 120 + mom, "勢いスコア": mom,
+            "スコア理由": "スポカフェ掲載(再取得POIで座標復活)/無料→有料転換",
+            "ソース": "スポカフェマスタ補完(POI再取得)",
+            "スポカフェ掲載": "○", "スポカフェプラン": rg["プラン"], "ファンスタ掲載": "",
+            "評価": rg["rating"], "口コミ数": rg["reviews"],
+            "geo_quality": "A", "ジオコーディング精度": "詳細(POI再取得)",
+        })
+        rows.append(new)
+        n_added += 1
+
     # フェーズ05クリーン出力のバックアップは初回のみ作成（再実行で壊さない）
     os.makedirs(os.path.dirname(V2_BACKUP), exist_ok=True)
     if not os.path.exists(V2_BACKUP):
@@ -186,7 +225,7 @@ def main():
     print("=" * 56)
     print(f"出力(上書き): {V2}  （バックアップ: _output/_archive/）")
     print(f"  評価補完: {n_fill} 件 / 勢いスコア付与: {n_mom} 件")
-    print(f"  再ジオコーディング復活: {n_revived} 件")
+    print(f"  再ジオコーディング復活: 既存更新{n_revived} 件 / 新規追加{n_added} 件")
     print(f"  閉店除外: {n_closed} 件 / 誤検出除外: {n_fp} 件")
     # AS勢い上位を確認
     asr = [r for r in rows if r.get("営業ランク") == "AS"]
