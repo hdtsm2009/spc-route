@@ -6,6 +6,9 @@
 <title>訪問プラン 作成</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <style>
 body{font-family:'Hiragino Sans','Meiryo',sans-serif;font-size:14px;margin:0;color:#333;background:#f5f6fa}
 .page-wrap{max-width:820px;margin:0 auto;padding:20px 16px}
@@ -81,7 +84,8 @@ a:hover{text-decoration:underline}
          cursor:pointer;color:#566;font-weight:bold}
 .map-tab.on{background:#2c3e50;color:#fff;border-color:#2c3e50}
 #cand-map-wrap{display:none;margin-bottom:12px}
-#cand-map{height:340px;border-radius:8px;border:1px solid #dde}
+#cand-map{height:380px;border-radius:8px;border:1px solid #dde}
+@media(min-width:760px){#cand-map{height:460px}}
 .map-legend{font-size:11px;color:#666;margin-top:6px;display:flex;flex-wrap:wrap;gap:4px 10px}
 .ml-dot{display:inline-block;width:10px;height:10px;border-radius:50%;vertical-align:middle;margin-right:2px}
 .cand-list{max-height:560px;overflow:auto;display:flex;flex-direction:column;gap:8px;padding:2px}
@@ -697,7 +701,7 @@ function renderSummary(){
 }
 
 // ── 地図プレビュー（タブで表示。デフォルトは折りたたみ） ──
-let CAND_MAP = null, CAND_MARKERS = {}, CAND_ROUTE = null, CAND_ORIGIN_MK = null;
+let CAND_MAP = null, CAND_MARKERS = {}, CAND_ROUTE = null, CAND_ORIGIN_MK = null, CAND_CLUSTER = null;
 const MAP_COLOR = {S:'#e74c3c',AS:'#e67e22',AF:'#d35400',B:'#3498db',C:'#7f8c8d'};
 
 function setMapView(show){
@@ -711,7 +715,12 @@ function ensureCandMap(){
     CAND_MAP = L.map('cand-map');
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
       {maxZoom:19, attribution:'© OpenStreetMap'}).addTo(CAND_MAP);
-    if(LAST_ORIGIN) CAND_MAP.setView([LAST_ORIGIN.lat, LAST_ORIGIN.lng], 15);
+    // 起点が無い場合は候補の中心、それも無ければ東京駅付近にフォールバック
+    if(LAST_ORIGIN){ CAND_MAP.setView([LAST_ORIGIN.lat, LAST_ORIGIN.lng], 15); }
+    else {
+      const fc = (LAST_CANDIDATES.find(c => c.lat && c.lng));
+      CAND_MAP.setView(fc ? [fc.lat, fc.lng] : [35.681, 139.767], fc ? 14 : 11);
+    }
   }
   setTimeout(() => { CAND_MAP.invalidateSize(); fitCandMap(); refreshCandMap(); }, 60);
 }
@@ -734,7 +743,13 @@ function nnOrderSel(){
 }
 function refreshCandMap(){
   if(!CAND_MAP || document.getElementById('cand-map-wrap').style.display === 'none') return;
+  // 既存ピン・クラスタ・線をクリア
   Object.values(CAND_MARKERS).forEach(m => CAND_MAP.removeLayer(m)); CAND_MARKERS = {};
+  if(CAND_CLUSTER){ CAND_CLUSTER.clearLayers(); } else {
+    CAND_CLUSTER = L.markerClusterGroup({maxClusterRadius: 45, spiderfyOnMaxZoom: true,
+      showCoverageOnHover: false, disableClusteringAtZoom: 17});
+    CAND_MAP.addLayer(CAND_CLUSTER);
+  }
   if(CAND_ROUTE){ CAND_MAP.removeLayer(CAND_ROUTE); CAND_ROUTE = null; }
   if(LAST_ORIGIN && !CAND_ORIGIN_MK){
     CAND_ORIGIN_MK = L.marker([LAST_ORIGIN.lat, LAST_ORIGIN.lng], {icon: L.divIcon({className:'',
@@ -744,9 +759,11 @@ function refreshCandMap(){
   const numOf = {}; order.forEach((c,i) => numOf[c.id] = i+1);
   getDisplayed().forEach(c => {
     if(!c.lat || !c.lng) return;
-    const m = L.marker([c.lat, c.lng], {icon: pinIconCand(c, numOf[c.id])}).addTo(CAND_MAP)
+    const m = L.marker([c.lat, c.lng], {icon: pinIconCand(c, numOf[c.id])})
       .bindPopup(`<b>${esc(c.name)}</b><br>${esc(c.rank)}・勢い${c.momentum||0}・★${esc(c.rating||'-')}<br>起点から${Math.round(c.dist_m||0)}m`);
     m.on('click', () => selectStore(c.id));
+    // 選択店は番号・周遊線を埋もれさせないため非クラスタ（地図に直接）。未選択はクラスタへ
+    if(SELECTED.has(c.id)){ m.addTo(CAND_MAP); } else { CAND_CLUSTER.addLayer(m); }
     CAND_MARKERS[c.id] = m;
   });
   if(order.length && LAST_ORIGIN){

@@ -13,6 +13,7 @@ QA列 GSI_Google距離m: 既存のGoogle Places補完CSV（既納品データ・
 """
 import os
 import csv
+import glob
 import json
 import math
 import time
@@ -22,7 +23,7 @@ import requests
 
 ROOT = r"G:\マイドライブ\作業フォルダ2025～\Claude作業フォルダ\Claudecode スポカフェ"
 BASE = os.path.join(ROOT, "訪問店舗提案サービス")
-EXPORT = os.path.join(ROOT, "_マスタデータ", "スポカフェ公式エクスポート_20260602.csv")
+EXPORT = sorted(glob.glob(os.path.join(ROOT, "_マスタデータ", "スポカフェ公式エクスポート_*.csv")))[-1]
 GP_CSV = os.path.join(BASE, "_納品_スポカフェ掲載店住所還元_20260530",
                       "スポカフェ掲載店_住所補完データ_20260530.csv")
 CACHE = os.path.join(BASE, "_data", "geocode_cache.json")

@@ -12,13 +12,24 @@
 import os
 import sys
 import csv
+import glob
 import collections
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from normalize import norm_name, norm_phone, extract_pref_city  # noqa
 
 ROOT = r"G:\マイドライブ\作業フォルダ2025～\Claude作業フォルダ\Claudecode スポカフェ"
-SRC = os.path.join(ROOT, "_マスタデータ", "スポカフェ公式エクスポート_20260602.csv")
+
+
+def latest_official():
+    """_マスタデータ の最新の スポカフェ公式エクスポート_*.csv を返す（定期取込対応）。"""
+    cands = sorted(glob.glob(os.path.join(ROOT, "_マスタデータ", "スポカフェ公式エクスポート_*.csv")))
+    if not cands:
+        raise SystemExit("公式エクスポートが _マスタデータ に見つかりません")
+    return cands[-1]
+
+
+SRC = latest_official()
 OUT = os.path.join(ROOT, "訪問店舗提案サービス", "_output")
 
 REQUIRED = ["店舗ID", "ステータス", "住所", "建物", "電話番号", "郵便番号",

@@ -9,6 +9,7 @@ import os
 import sys
 import csv
 import json
+import glob
 import hashlib
 import shutil
 import tempfile
@@ -365,7 +366,8 @@ def main():
     print(f"名寄せ後 ユニーク店舗={len(merged)}")
 
     print("掲載マスタ突合中...")
-    spocafe = load_spocafe_master(os.path.join(MASTER, "スポカフェ公式エクスポート_20260602.csv"))
+    spocafe = load_spocafe_master(sorted(glob.glob(
+        os.path.join(MASTER, "スポカフェ公式エクスポート_*.csv")))[-1])
     fansta = load_fansta_master(os.path.join(MASTER, "ファンスタ収集データ_20260416.xlsx"))
     print(f"  スポカフェ掲載(公式)={len(spocafe['all'])} 電話衝突={len(spocafe['phone_ambiguous'])} ファンスタ={len(fansta)}")
 
