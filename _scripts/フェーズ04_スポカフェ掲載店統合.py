@@ -76,7 +76,9 @@ def main():
             n_spc += 1
         addr = b.get("住所", "") + ((" " + b["建物"]) if b.get("建物") else "")
         prec = "詳細(住所GSI)" if b.get("精度") == "詳細" else "町名(住所GSI)"
-        in_fansta = "○" if (inf["電話"] and inf["電話"] in fansta_phones) else ""
+        # ファンスタは電話一致で付与。ただし複数店共有電話(代表/本部番号疑い)は過剰S化を防ぐため除外
+        in_fansta = "○" if (inf["電話"] and inf["電話"] not in spo["phone_ambiguous"]
+                            and inf["電話"] in fansta_phones) else ""
         row = {fn: "" for fn in fieldnames}
         row.update({
             "店舗ID": sid, "店名": inf["店名"], "電話番号": inf["電話"],

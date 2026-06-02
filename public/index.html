@@ -614,9 +614,12 @@ function planChip(c){
 // 有益情報帯（営業時間+定休 / 席数 / 📺モニター(数・サイズ) / 最寄駅）
 function factsRow(c){
   const f = [];
-  if(c.hours){ let h = '🕒 ' + esc(String(c.hours).replace(/\s+/g,' ').slice(0,20));
+  if(c.hours){
+    let h = '🕒 ' + esc(c.hours);
     if(c.holiday && !/無休|なし/.test(c.holiday)) h += `（${esc(String(c.holiday).slice(0,10))}休）`;
-    f.push(h); }
+    const full = (c.hours_full && c.hours_full !== c.hours) ? esc(c.hours_full) : '';
+    f.push(full ? `<span class="fct-mon" title="${full}">${h} ⓘ</span>` : `<span>${h}</span>`);
+  }
   if(c.seats)   f.push('🪑 ' + esc(String(c.seats).slice(0,12)));
   if(c.monitor) f.push(`<span class="fct-mon" title="${esc(c.monitor_full||'')}">📺 ${esc(c.monitor)}${c.monitor_full?' ⓘ':''}</span>`);
   if(c.station) f.push('🚉 ' + esc(c.station));

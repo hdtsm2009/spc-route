@@ -25,6 +25,27 @@ import json
 import os
 import re
 import sys
+import unicodedata
+
+
+def _hours_short(s):
+    """営業時間の自由記述から代表的な時間レンジを抽出（曜日ラベル等を除去）。
+    例「月・火14:00-2:00」→「14:00〜翌2:00」。最大2レンジ、全文は別途ⓘで表示。"""
+    s = str(s or "")
+    if not s.strip():
+        return ""
+    h = unicodedata.normalize("NFKC", s)
+    rngs = []
+    for m in re.finditer(r"(\d{1,2})(?::(\d{2}))?\s*[~〜\-―ー—]\s*(翌\s*日?)?\s*(\d{1,2})(?::(\d{2}))?", h):
+        a = f"{int(m.group(1))}:{m.group(2) or '00'}"
+        b = ("翌" if m.group(3) else "") + f"{int(m.group(4))}:{m.group(5) or '00'}"
+        r = f"{a}〜{b}"
+        if r not in rngs:
+            rngs.append(r)
+    if not rngs:
+        return h.strip()[:14]
+    out = "／".join(rngs[:2])
+    return out + ("…" if len(rngs) > 2 else "")
 
 
 def _monitor_short(s):
@@ -151,7 +172,8 @@ class handler(BaseHTTPRequestHandler):
                 "pitch":        G._visit_pitch(r),
                 "dist_m":       r.get("_dist_m", 0),
                 "open_status":  r.get("_open_status", ""),
-                "hours":        r.get("営業時間", ""),
+                "hours":        _hours_short(r.get("営業時間", "")),
+                "hours_full":   r.get("営業時間", ""),
                 "holiday":      r.get("定休日", ""),
                 "seats":        r.get("席数", ""),
                 "monitor":      _monitor_short(r.get("モニター", "")),
