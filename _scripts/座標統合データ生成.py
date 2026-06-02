@@ -1,12 +1,13 @@
 # -*- coding: utf-8 -*-
 """スポカフェ管理画面エクスポート(shops_*.csv)の掲載店に緯度経度を統合する。
 
-座標の付け方（出所の優先順位）:
-  1) GSI住所ジオコーディング … 今回手に入った番地付き住所を国土地理院API(無料)で変換。一次情報ベースで最も正確。
-  2) Google補完座標(既存)     … GSIが失敗した店は、既納品のGoogle Places補完CSVの座標で救済。
-  3) 失敗                      … 上記いずれも取れない店（手当て対象）。
+座標の付け方（出所）:
+  1) GSI住所ジオコーディング … 番地付き住所を国土地理院API(無料)で変換。一次情報ベースで最も正確。
+  2) 失敗                      … GSIで取れない店（手当て対象）。geo_quality NGで後段間引き。
+  ※ POI/Google救済は廃止（誤マッチの元凶のため使わない）。GSI失敗は失敗として扱う。
 
-QA列として、GSIとGoogleの両方が取れた店は両者の距離(m)を出し、ズレの大きい店を炙り出せるようにする。
+QA列 GSI_Google距離m: 既存のGoogle Places補完CSV（既納品データ・新規API呼び出しなし）と
+  GSI座標の距離(m)。旧POI座標がどれだけ誤っていたかの参考値（救済には使わない）。
 
 出力: _output/座標統合データ_YYYYMMDD.csv （UTF-8 BOM・店舗IDでJOINして緯度/経度を還元）
 """
@@ -21,7 +22,7 @@ import requests
 
 ROOT = r"G:\マイドライブ\作業フォルダ2025～\Claude作業フォルダ\Claudecode スポカフェ"
 BASE = os.path.join(ROOT, "訪問店舗提案サービス")
-EXPORT = r"C:\Users\hdtsm\Downloads\shops_20260602_135027.csv"
+EXPORT = os.path.join(ROOT, "_マスタデータ", "スポカフェ公式エクスポート_20260602.csv")
 GP_CSV = os.path.join(BASE, "_納品_スポカフェ掲載店住所還元_20260530",
                       "スポカフェ掲載店_住所補完データ_20260530.csv")
 CACHE = os.path.join(BASE, "_data", "geocode_cache.json")
@@ -130,12 +131,10 @@ def main():
         if gsi_lat is not None:
             lat, lng, src, prec = gsi_lat, gsi_lng, "GSI住所", gsi_prec
             n_gsi += 1
-        elif sid in gmap:
-            lat, lng, src, prec = gmap[sid][0], gmap[sid][1], "Google補完", "Google"
-            n_google += 1
         else:
+            # Google救済は廃止：GSI失敗は「失敗」のまま（後段でNG間引き）
             n_fail += 1
-        # QA: GSIとGoogleの距離
+        # QA: GSIと既存Google補完(納品データ)の距離（救済には使わない・新規API無し）
         dist = ""
         if gsi_lat is not None and sid in gmap:
             dist = round(haversine_m(gsi_lat, gsi_lng, gmap[sid][0], gmap[sid][1]))
