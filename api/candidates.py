@@ -23,7 +23,26 @@ Response 200 (JSON):
 from http.server import BaseHTTPRequestHandler
 import json
 import os
+import re
 import sys
+
+
+def _monitor_short(s):
+    """モニター自由記述を「最大インチ＋台数」に圧縮。例 '100インチ・計3台'。
+    取れなければ プロジェクター/スクリーン有無 or '観戦設備あり'。原文は別途ⓘで全文表示。"""
+    s = str(s or "").strip()
+    if not s:
+        return ""
+    inches = [int(n) for n in re.findall(r"(\d{2,3})\s*(?:インチ|型)", s)]
+    counts = [int(n) for n in re.findall(r"(\d+)\s*台", s)]
+    parts = []
+    if inches:
+        parts.append(f"{max(inches)}インチ")
+    elif "プロジェクター" in s or "スクリーン" in s or "ビジョン" in s:
+        parts.append("プロジェクター/大型")
+    if counts:
+        parts.append(f"計{max(counts)}台" if max(counts) > 1 else "1台")
+    return "・".join(parts) if parts else "観戦設備あり"
 
 _DIR = os.path.dirname(os.path.abspath(__file__))
 if _DIR not in sys.path:
@@ -132,6 +151,13 @@ class handler(BaseHTTPRequestHandler):
                 "pitch":        G._visit_pitch(r),
                 "dist_m":       r.get("_dist_m", 0),
                 "open_status":  r.get("_open_status", ""),
+                "hours":        r.get("営業時間", ""),
+                "holiday":      r.get("定休日", ""),
+                "seats":        r.get("席数", ""),
+                "monitor":      _monitor_short(r.get("モニター", "")),
+                "monitor_full": r.get("モニター", ""),
+                "station":      r.get("最寄駅", ""),
+                "plan":         r.get("スポカフェプラン", ""),
                 "phone":        r.get("電話番号", ""),
                 "hp":           r.get("HP", ""),
                 "source":       r.get("ソース", ""),

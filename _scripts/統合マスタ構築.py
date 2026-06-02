@@ -112,7 +112,7 @@ def assign_id(phone_key: str, name_key: str, id_map: dict) -> str:
 # 統合スキーマ（出力列順）
 COLUMNS = [
     "店舗ID", "店名", "業態ジャンル", "電話番号", "住所",
-    "最寄駅", "営業時間", "予算", "評価", "口コミ数",
+    "最寄駅", "営業時間", "定休日", "席数", "モニター", "予算", "評価", "口コミ数",
     "HP", "SNS", "ソース", "スポーツ設備",
     "スポカフェ掲載", "スポカフェプラン", "ファンスタ掲載", "営業ターゲット",
     "緯度", "経度", "ジオコーディング精度",
@@ -266,6 +266,9 @@ def load_spocafe_master(path):
             "住所": (r.get("住所") or "").strip(), "建物": (r.get("建物") or "").strip(),
             "電話": norm_phone(r.get("電話番号", "")), "郵便番号": (r.get("郵便番号") or "").strip(),
             "営業時間": (r.get("営業時間") or "").strip(),
+            "定休日": (r.get("定休日") or "").strip(),
+            "席数": (r.get("席数") or "").strip(),
+            "モニター": (r.get("モニター") or "").strip(),
         })
     # by_phone: 同一電話に複数の異なる数値ID → phone_ambiguous（自動確定しない）
     phone_map = collections.defaultdict(list)
@@ -388,6 +391,11 @@ def main():
         e["スポカフェ掲載"] = "○" if spo_info else ""
         # 掲載中ならプランも保持（フリー＝無料掲載＝有料転換の営業先）
         e["スポカフェプラン"] = spo_info["プラン"] if spo_info else ""
+        # 観戦店ならではの有益情報（スポカフェ公式由来）。scrapeに無い分を補う
+        if spo_info:
+            for col in ("定休日", "席数", "モニター"):
+                if not str(e.get(col, "")).strip():
+                    e[col] = spo_info.get(col, "")
         if spo_info:
             matched_spocafe_ids.add(spo_info["数値ID"])
         in_fansta = bool(rec_keys & fansta.keys()) or (

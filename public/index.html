@@ -118,6 +118,16 @@ a:hover{text-decoration:underline}
 .cc-pitch.hot{background:#fff3e0;color:#d35400;border-color:#f5cba7}
 .cc-mom{font-size:11px;background:#f4f6f8;color:#566;border:1px solid #dde3ea;padding:2px 9px;border-radius:10px;cursor:help}
 .cc-mom.hot{background:#fff6e8;color:#c0531a;border-color:#f3c98f;font-weight:bold}
+.cc-mbar{font-size:11px;color:#9aa3ad;font-weight:bold;display:inline-flex;align-items:center;gap:4px;cursor:help}
+.cc-mbar.hot{color:#c0531a}
+.cc-mbar .mb{display:inline-block;width:46px;height:6px;background:#eef0f2;border-radius:3px;overflow:hidden}
+.cc-mbar .mb>i{display:block;height:100%;background:#cbd2da}
+.cc-mbar.hot .mb>i{background:linear-gradient(90deg,#f6b24a,#e8631a)}
+.cc-plan{font-size:11px;background:#f3e8fb;color:#8e44ad;border:1px solid #e3d6f0;padding:2px 9px;border-radius:10px}
+.cc-facts{margin:8px 0 0;padding:5px 9px 5px 29px;font-size:11.5px;color:#456;background:#f8fafc;
+          border:1px solid #eef1f4;border-radius:6px;display:flex;flex-wrap:wrap;gap:2px 6px;align-items:center}
+.cc-facts .fdot{color:#cfd6dd}
+.cc-facts .fct-mon{cursor:help}
 .cc-chain{font-size:11px;background:#f3e8fb;color:#8e44ad;padding:2px 9px;border-radius:10px}
 .cc-meta{margin:8px 0 0;padding-left:29px;display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;font-size:12px;color:#999}
 .cc-addr{flex:1;min-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -206,6 +216,10 @@ tr:hover td{background:#f8f9fa}
   <div class="guide-body">
     <ul class="changelog">
       <li><span class="cl-date">2026-06-02</span>
+        <strong>候補カードに観戦設備など“営業に効く情報”を追加</strong><br>
+        「最優先」連発をやめ <strong>🔥勢いバー</strong>で同じランク内の優劣を可視化。
+        <strong>営業時間・定休・席数・📺モニター(数/サイズ)・プラン・徒歩分</strong>をカードに表示し、訪問判断とトークがしやすくなりました。</li>
+      <li><span class="cl-date">2026-06-02</span>
         <strong>ルート作成をワンタップ化＋おまかせ選択</strong><br>
         画面下に<strong>選択サマリー＋「🗺 ルート作成」ボタンを固定</strong>表示（スクロール不要）。
         「<strong>✨ おまかせ選択</strong>」で近くて本命の店を自動で数件選択、「<strong>選択中のみ</strong>」で発行前に見返せます。</li>
@@ -214,14 +228,14 @@ tr:hover td{background:#f8f9fa}
         スポカフェ掲載店の元データを<strong>公式の最新エクスポート（番地付き）</strong>に切替。
         これまで載っていなかった<strong>新しい掲載店を取り込み</strong>、停止した店は自動的に除外。
         全店の地図位置も番地ベースの正確な座標になりました（店名検索の誤マッチを根絶）。</li>
-      <li><span class="cl-date">2026-06-02</span>
-        <strong>訪問結果の記録・接触履歴の表示（チーム共有）</strong><br>
-        各候補に「訪問済・興味あり・NG」等を<strong>その場で記録</strong>でき、誰がいつ何をしたかが
-        カードに出ます（<strong>未接触／🟣◯◯が訪問済</strong>）。「未接触のみ」表示でチームの二重訪問を防げます。</li>
     </ul>
     <details class="cl-more">
       <summary>＋ それ以前の更新履歴</summary>
       <ul class="changelog">
+        <li><span class="cl-date">2026-06-02</span>
+          <strong>訪問結果の記録・接触履歴の表示（チーム共有）</strong><br>
+          各候補に「訪問済・興味あり・NG」等をその場で記録でき、誰がいつ何をしたかがカードに出ます
+          （未接触／🟣◯◯が訪問済）。「未接触のみ」表示でチームの二重訪問を防げます。</li>
         <li><span class="cl-date">2026-06-02</span>
           <strong>候補を地図で確認できるように</strong><br>
           候補画面に<strong>地図プレビュー</strong>を追加（「🗺 地図で見る」タブ）。ピンの色でランクが分かり、
@@ -584,14 +598,37 @@ function honmeiLabel(c){
   if(r === 'B')  return '新規開拓';
   return '様子見';
 }
+function walkMin(m){ return m ? Math.max(1, Math.round(m/80)) : 0; }
+// 勢いバー（「最優先」連発の置換。同ランク内の優劣を可視化）
+function momentumBar(c){
+  const m = c.momentum || 0, hot = m >= 60, pct = Math.max(4, Math.min(100, m));
+  const tip = `勢い${m}　${c.score_reason || ''}（評価×口コミ×価格帯 / 本命度ランク ${c.rank||''}）`;
+  return `<span class="cc-mbar ${hot?'hot':''}" title="${esc(tip)}">${hot?'🔥':''}勢い${m}<span class="mb"><i style="width:${pct}%"></i></span></span>`;
+}
+// スポカフェプラン明示（無料＝新規転換 / プラン名＝上位アップセル）
+function planChip(c){
+  if(!c.plan) return '';
+  const free = (c.plan === 'フリー');
+  return `<span class="cc-plan" title="スポカフェプラン">プラン:${free?'無料':esc(c.plan)}</span>`;
+}
+// 有益情報帯（営業時間+定休 / 席数 / 📺モニター(数・サイズ) / 最寄駅）
+function factsRow(c){
+  const f = [];
+  if(c.hours){ let h = '🕒 ' + esc(String(c.hours).replace(/\s+/g,' ').slice(0,20));
+    if(c.holiday && !/無休|なし/.test(c.holiday)) h += `（${esc(String(c.holiday).slice(0,10))}休）`;
+    f.push(h); }
+  if(c.seats)   f.push('🪑 ' + esc(String(c.seats).slice(0,12)));
+  if(c.monitor) f.push(`<span class="fct-mon" title="${esc(c.monitor_full||'')}">📺 ${esc(c.monitor)}${c.monitor_full?' ⓘ':''}</span>`);
+  if(c.station) f.push('🚉 ' + esc(c.station));
+  return f.length ? `<div class="cc-facts">${f.join('<span class="fdot">・</span>')}</div>` : '';
+}
 function cardHtml(c){
   const r    = rankOf(c);
   const sel  = SELECTED.has(c.id);
-  const dist = c.dist_m ? `${Math.round(c.dist_m)}m` : '';
-  // 本命（S＝両方掲載 / AS＝スポカフェ無料→有料転換）はpitchをhot強調
-  const isHonmei = (r === 'S' || r === 'AS');
-  const pitch = c.pitch
-    ? `<span class="cc-pitch ${isHonmei?'hot':''}">${esc(c.pitch)}</span>` : '';
+  const dm   = c.dist_m || 0;
+  const dist = dm ? `${Math.round(dm)}m・徒歩${walkMin(dm)}分` : '';
+  const isHonmei = (r === 'S' || r === 'AS');   // 本命のpitchをhot強調
+  const pitch = c.pitch ? `<span class="cc-pitch ${isHonmei?'hot':''}">${esc(c.pitch)}</span>` : '';
   const mom   = momChip(c);
   const genre = c.genre ? `<span class="cc-genre">${esc(c.genre)}</span>` : '';
   const chain = c.chain ? `<span class="cc-chain">チェーン疑</span>` : '';
@@ -608,11 +645,11 @@ function cardHtml(c){
         <span class="cc-dist">${dist}</span>
         <span class="cc-open">${openLabel(c.open_status)}</span>
       </div>
-      <div class="cc-tags">${pitch}${mom}${genre}${chain}</div>
+      <div class="cc-tags">${momentumBar(c)}${mom}${pitch}${planChip(c)}${genre}${chain}</div>
+      ${factsRow(c)}
       <div class="cc-meta">
         <span class="cc-addr">📍 ${esc(c.addr || '住所情報なし')}${c.approx?' <span class="cc-approx" title="番地が無いため地名（町名）の中心点で表示。現地で要確認">概算位置(町名)</span>':''}</span>
         <span class="cc-links">${links}</span>
-        <span class="cc-score" title="${esc((c.score_reason || 'スコア内訳なし') + '（営業スコア ' + c.score + ' / 勢い ' + (c.momentum||0) + '）')}">本命度: ${honmeiLabel(c)} ⓘ</span>
       </div>
       <div class="cc-visit-row">${visitBadge(c)}${visitSelect(c)}</div>
     </div>`;
