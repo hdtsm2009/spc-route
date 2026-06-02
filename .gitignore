@@ -26,9 +26,14 @@ _data/places_regeocode_cache.json
 _output/_test_*.csv
 _output/_閉店検証_*.csv
 _output/_誤検出再ジオコーディング_*.csv
+_output/座標統合データ_*.csv
+_output/_*.txt
 
 # スポカフェ向け納品物（個別店舗データ・非公開）
 _納品_*/
+
+# 調査・モック（ローカル専用）
+_research/
 
 # 元データ（生データ）
 _data/raw/
