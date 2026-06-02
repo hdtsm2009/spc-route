@@ -113,6 +113,11 @@ a:hover{text-decoration:underline}
 .cc-links{white-space:nowrap}
 .cc-links a{font-size:12px;margin-left:12px}
 .cc-score{cursor:help;border-bottom:1px dotted #bbb;white-space:nowrap}
+.cc-visit-row{margin:8px 0 0;padding-left:29px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.cc-visit{font-size:11px;padding:2px 9px;border-radius:10px}
+.cc-visit.none{background:#f4f6f8;color:#8a96a3;border:1px solid #e3e8ef}
+.cc-visit.done{background:#f3e9fb;color:#7a3fa8;border:1px solid #d9bef0;font-weight:bold}
+.cc-visit-sel{font-size:11px;padding:2px 6px;border:1px solid #ccd;border-radius:5px;background:#fff;color:#556;cursor:pointer}
 
 /* 使い方ガイド */
 .guide{background:#fff;border:1px solid #dde;border-radius:8px;padding:0;margin-bottom:20px;
@@ -189,6 +194,10 @@ tr:hover td{background:#f8f9fa}
   <div class="cl-header">🆕 更新履歴（大きめの改善）</div>
   <div class="guide-body">
     <ul class="changelog">
+      <li><span class="cl-date">2026-06-02</span>
+        <strong>訪問結果の記録・接触履歴の表示（チーム共有）</strong><br>
+        各候補に「訪問済・興味あり・NG」等を<strong>その場で記録</strong>でき、誰がいつ何をしたかが
+        カードに出ます（<strong>未接触／🟣◯◯が訪問済</strong>）。「未接触のみ」表示でチームの二重訪問を防げます。</li>
       <li><span class="cl-date">2026-06-02</span>
         <strong>候補を地図で確認できるように</strong><br>
         候補画面に<strong>地図プレビュー</strong>を追加（「🗺 地図で見る」タブ）。ピンの色でランクが分かり、
@@ -315,6 +324,7 @@ tr:hover td{background:#f8f9fa}
       </select>
       <label class="filter-chk"><input type="checkbox" id="filter-open" onchange="renderCandidates()">🟢営業中のみ</label>
       <label class="filter-chk"><input type="checkbox" id="filter-nochain" onchange="renderCandidates()">チェーン除く</label>
+      <label class="filter-chk"><input type="checkbox" id="filter-unvisited" onchange="renderCandidates()">未接触のみ</label>
       <span class="rank-filter" id="rank-filter"></span>
     </div>
     <span class="cand-count" id="cand-count"></span>
@@ -508,6 +518,40 @@ function momChip(c){
   const fire = (c.momentum || 0) >= 60 ? '🔥' : '';
   return `<span class="cc-mom${hot}" title="勢いスコア ${esc(c.momentum||0)}（評価×口コミ×価格帯）">${fire}${parts.join('・')}</span>`;
 }
+// 接触履歴バッジ（チーム二重訪問防止）
+function visitBadge(c){
+  const v = c.visit;
+  if(v && v.status){
+    return `<span class="cc-visit done" title="${esc((v.owner||'')+' '+(v.date||'')+' '+(v.memo||''))}">🟣 ${esc(v.owner||'?')}が${esc(v.date||'')}に「${esc(v.status)}」</span>`;
+  }
+  return `<span class="cc-visit none">未接触</span>`;
+}
+// ワンタップ記録（status選択）
+const VISIT_OPTS = ['','訪問済','架電済','興味あり','掲載済','NG','再訪候補'];
+function visitSelect(c){
+  const cur = (c.visit && c.visit.status) || '';
+  const opts = VISIT_OPTS.map(o =>
+    `<option value="${o}" ${o===cur?'selected':''}>${o||'＋訪問結果を記録'}</option>`).join('');
+  return `<select class="cc-visit-sel" onclick="event.stopPropagation()" onchange="recordVisit(this)">${opts}</select>`;
+}
+async function recordVisit(sel){
+  const card = sel.closest('.cand-card');
+  const id = card.dataset.id, status = sel.value;
+  const owner = document.getElementById('gen-owner').value;
+  const c = LAST_CANDIDATES.find(x => x.id === id);
+  sel.disabled = true;
+  try{
+    const res = await fetch('/api/visit', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({id, status, owner})});
+    if(!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+    if(c) c.visit = data.record;   // 取消時は null
+    renderCandidates();
+  }catch(e){
+    sel.disabled = false;
+    alert('記録に失敗しました: ' + e.message);
+  }
+}
 function honmeiLabel(c){
   // 生スコアの代わりに「本命度」を語彙で表示（数値は ⓘ ツールチップに退避）
   const r = rankOf(c);
@@ -547,6 +591,7 @@ function cardHtml(c){
         <span class="cc-links">${links}</span>
         <span class="cc-score" title="${esc((c.score_reason || 'スコア内訳なし') + '（営業スコア ' + c.score + ' / 勢い ' + (c.momentum||0) + '）')}">本命度: ${honmeiLabel(c)} ⓘ</span>
       </div>
+      <div class="cc-visit-row">${visitBadge(c)}${visitSelect(c)}</div>
     </div>`;
 }
 
@@ -577,12 +622,14 @@ function getDisplayed(){
   const maxDist  = parseInt(document.getElementById('filter-dist').value, 10) || 0;
   const openOnly = document.getElementById('filter-open').checked;
   const noChain  = document.getElementById('filter-nochain').checked;
+  const unvisited = document.getElementById('filter-unvisited').checked;
   let disp = LAST_CANDIDATES.filter(c => {
     const r = rankOf(c);
     if(RANK_KEYS.includes(r) && !RANK_ON[r]) return false;
     if(maxDist && (c.dist_m || 0) > maxDist) return false;
     if(openOnly && c.open_status !== '開いている可能性高') return false;
     if(noChain && c.chain) return false;
+    if(unvisited && c.visit && c.visit.status) return false;
     return true;
   });
   if(document.getElementById('cand-sort').value === 'dist'){

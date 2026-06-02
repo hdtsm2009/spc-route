@@ -31,6 +31,28 @@ if _DIR not in sys.path:
 
 import generate_plan as G  # filter_candidates / get_score / _visit_pitch / resolve_origin 等
 
+try:
+    import _kv
+except Exception:
+    _kv = None
+
+
+def _load_visits():
+    """KVの訪問記録 {store_id: {status,owner,date,...}} を返す。未設定/失敗時は空。"""
+    if not _kv or not _kv.is_configured():
+        return {}
+    try:
+        flat = _kv._cmd("HGETALL", "visits") or []
+        out = {}
+        for i in range(0, len(flat) - 1, 2):
+            try:
+                out[flat[i]] = json.loads(flat[i + 1])
+            except (ValueError, TypeError):
+                pass
+        return out
+    except Exception:
+        return {}
+
 
 class handler(BaseHTTPRequestHandler):
 
@@ -85,6 +107,7 @@ class handler(BaseHTTPRequestHandler):
         cands.sort(key=lambda r: (G.rank_order(r), -_mom(r), -G.get_score(r), r.get("_dist_m", 1 << 30)))
         cands = cands[:limit]
 
+        visits = _load_visits()
         out = []
         for r in cands:
             try:
@@ -114,6 +137,7 @@ class handler(BaseHTTPRequestHandler):
                 "source":       r.get("ソース", ""),
                 "chain":        r.get("chain_flag") == "チェーン疑",
                 "approx":       "概算" in str(r.get("ジオコーディング精度", "")),
+                "visit":        visits.get(r.get("店舗ID", ""), None),
             })
 
         self._json(200, {"origin": origin, "candidates": out, "count": len(out)})
