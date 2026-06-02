@@ -427,6 +427,31 @@ const PRESETS = [
 let LAST_ORIGIN = null;     // {lat,lng,title,source}
 let LAST_CANDIDATES = [];   // 検索結果
 let PRESET_LATLNG = null;   // チップ選択時の座標（自由入力すると解除）
+let LAST_SEARCH_ID = null;  // 利用ログ: 検索→ルート発行の連結用
+
+// 利用ログ送信（失敗は黙殺＝本体機能を止めない）
+function logEvent(d){
+  try{ fetch('/api/log', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(d), keepalive:true}).catch(()=>{}); }catch(e){}
+}
+function logSearchEvent(data){
+  const cs = LAST_CANDIDATES;
+  const rc = {S:0,AS:0,AF:0,B:0,C:0};
+  cs.forEach(c => { const r=rankOf(c); if(r in rc) rc[r]++; });
+  logEvent({
+    ev:'search', search_id: LAST_SEARCH_ID,
+    owner: document.getElementById('gen-owner').value,
+    area: (LAST_ORIGIN && LAST_ORIGIN.title) || document.getElementById('gen-origin').value.trim(),
+    lat: LAST_ORIGIN && LAST_ORIGIN.lat, lng: LAST_ORIGIN && LAST_ORIGIN.lng,
+    ws: document.getElementById('gen-start').value, we: document.getElementById('gen-end').value,
+    radius: parseInt(document.getElementById('gen-radius').value,10) || null,
+    n: (data && data.count) || cs.length, rank_counts: rc,
+    filters: {dist: document.getElementById('filter-dist').value,
+              open: document.getElementById('filter-open').checked,
+              nochain: document.getElementById('filter-nochain').checked},
+    sort: document.getElementById('cand-sort').value,
+  });
+}
 
 function esc(s){
   return String(s == null ? '' : s).replace(/[&<>"]/g, c =>
@@ -491,6 +516,9 @@ async function searchCandidates(){
     const data = await res.json();
     LAST_ORIGIN = data.origin;
     LAST_CANDIDATES = data.candidates || [];
+    // 利用ログ: searchイベント（search_id発行・以後のroute連結に使用）
+    LAST_SEARCH_ID = 's_' + Date.now() + '_' + Math.floor(1000 + Math.random()*9000);
+    logSearchEvent(data);
     SELECTED = new Set(LAST_CANDIDATES.slice(0, 8).map(c => c.id)); // 上位8件を初期選択
     RANK_ON = {S:true, AS:true, AF:true, B:true, C:true};
     document.getElementById('cand-sort').value = 'score';
@@ -872,6 +900,7 @@ async function generatePlan(){
     owner: document.getElementById('gen-owner').value,
     window_start: document.getElementById('gen-start').value,
     window_end:   document.getElementById('gen-end').value,
+    search_id: LAST_SEARCH_ID,   // 利用ログ: 検索→ルート発行の連結
   };
   if(LAST_ORIGIN){ payload.lat = LAST_ORIGIN.lat; payload.lng = LAST_ORIGIN.lng;
                    payload.origin_text = LAST_ORIGIN.title; }

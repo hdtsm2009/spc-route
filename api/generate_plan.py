@@ -1210,6 +1210,29 @@ class handler(BaseHTTPRequestHandler):
                           f"生成エラー: {e}\n{traceback.format_exc()}")
             return
 
+        # ── 利用ログ: routeイベント（search_idで連結＋発行時点のrank/勢いスナップショット）──
+        try:
+            import _eventlog
+            snap, moms, rcnt = [], [], {}
+            for r in selected:
+                rk = str(r.get("営業ランク", ""))
+                m = get_momentum(r)
+                snap.append({"id": r.get("店舗ID", ""), "rank": rk, "mom_score": m})
+                moms.append(m)
+                rcnt[rk] = rcnt.get(rk, 0) + 1
+            _eventlog.log_event({
+                "ev": "route", "search_id": body.get("search_id"),
+                "route_id": _eventlog.gen_id("r"), "owner": owner or "", "area": origin["name"],
+                "n": store_count, "stores": snap,
+                "ranks": {k: rcnt.get(k, 0) for k in ("S", "AS", "AF", "B", "C")},
+                "mom_avg": round(sum(moms) / len(moms), 1) if moms else 0,
+                "total_min": sum(e.get("travel_min", 0) for e in entries)
+                + route_cfg.get("stay_minutes_per_store", 15) * store_count,
+                "km": round(sum(e.get("dist_m", 0) for e in entries) / 1000, 1),
+            })
+        except Exception:
+            pass
+
         # ── KV保存（設定時のみ）。保存できれば permalink を JSON で返す ──
         saved = self._try_save_plan(html, {
             "area":  origin["name"],

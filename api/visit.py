@@ -28,6 +28,21 @@ import _kv
 
 HASH_KEY = "visits"
 
+_SIDX = None
+
+
+def _store_meta(sid):
+    """店舗IDから (営業ランク, 勢いスコア) を返す（当時スコアのスナップショット用）。"""
+    global _SIDX
+    if _SIDX is None:
+        try:
+            import generate_plan as G
+            stores, _ = G._load_data()
+            _SIDX = {r.get("店舗ID"): (r.get("営業ランク", ""), G.get_momentum(r)) for r in stores}
+        except Exception:
+            _SIDX = {}
+    return _SIDX.get(sid, ("", 0))
+
 
 def _today_jst():
     return (datetime.datetime.utcnow() + datetime.timedelta(hours=9)).strftime("%Y-%m-%d")
@@ -76,6 +91,15 @@ class handler(BaseHTTPRequestHandler):
             self._json(503, {"error": "KV未設定のため記録できません（環境変数を確認）"})
             return
 
+        # 変更前のstatus（prev_status・ログ用）
+        prev_status = ""
+        try:
+            cur = _kv._cmd("HGET", HASH_KEY, sid)
+            if cur:
+                prev_status = (json.loads(cur) or {}).get("status", "")
+        except Exception:
+            pass
+
         rec = {
             "status":      body.get("status", ""),
             "owner":       body.get("owner", ""),
@@ -94,6 +118,22 @@ class handler(BaseHTTPRequestHandler):
         except Exception as e:
             self._json(500, {"error": f"記録に失敗: {e}"})
             return
+
+        # 利用ログ: visitイベント（当時スコア同梱・route連結はbest-effort）
+        try:
+            import _eventlog
+            rk, mom = _store_meta(sid)
+            _eventlog.log_event({
+                "ev": "visit", "visit_id": _eventlog.gen_id("v"),
+                "route_id": body.get("route_id"), "owner": body.get("owner", ""),
+                "id": sid, "status": body.get("status", ""), "prev_status": prev_status,
+                "rank_at_visit": rk, "mom_score_at_visit": mom,
+                "source": body.get("source", "store_card"),
+                "note_len": len(str(body.get("memo", "") or "")),
+            })
+        except Exception:
+            pass
+
         self._json(200, {"ok": True, "id": sid, "record": rec})
 
     def _cors(self):
