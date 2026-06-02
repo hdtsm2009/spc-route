@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>訪問プラン 作成</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
 body{font-family:'Hiragino Sans','Meiryo',sans-serif;font-size:14px;margin:0;color:#333;background:#f5f6fa}
 .page-wrap{max-width:820px;margin:0 auto;padding:20px 16px}
@@ -73,6 +75,15 @@ a:hover{text-decoration:underline}
 .cand-summary{margin-top:10px;padding:9px 13px;background:#f3fbf6;border:1px solid #b8e0c8;
               border-radius:6px;font-size:12.5px;color:#1e6e43;display:none}
 .cand-summary strong{color:#16633a}
+/* 地図タブ・地図 */
+.map-tabs{display:flex;gap:4px;margin:4px 0 10px}
+.map-tab{font-size:12px;padding:6px 16px;border:1px solid #ccd;background:#fff;border-radius:7px;
+         cursor:pointer;color:#566;font-weight:bold}
+.map-tab.on{background:#2c3e50;color:#fff;border-color:#2c3e50}
+#cand-map-wrap{display:none;margin-bottom:12px}
+#cand-map{height:340px;border-radius:8px;border:1px solid #dde}
+.map-legend{font-size:11px;color:#666;margin-top:6px;display:flex;flex-wrap:wrap;gap:4px 10px}
+.ml-dot{display:inline-block;width:10px;height:10px;border-radius:50%;vertical-align:middle;margin-right:2px}
 .cand-list{max-height:560px;overflow:auto;display:flex;flex-direction:column;gap:8px;padding:2px}
 .cand-card{border:1px solid #e3e8ef;border-radius:8px;padding:11px 13px;cursor:pointer;background:#fff;transition:.12s}
 .cand-card:hover{border-color:#b9c5d4;box-shadow:0 1px 6px rgba(0,0,0,.07)}
@@ -288,6 +299,21 @@ tr:hover td{background:#f8f9fa}
     </div>
     <span class="cand-count" id="cand-count"></span>
   </div>
+  <div class="map-tabs">
+    <button class="map-tab on" id="tab-list" onclick="setMapView(false)">📋 リスト</button>
+    <button class="map-tab" id="tab-map" onclick="setMapView(true)">🗺 地図で見る</button>
+  </div>
+  <div id="cand-map-wrap">
+    <div id="cand-map"></div>
+    <div class="map-legend">
+      <span><span class="ml-dot" style="background:#e74c3c"></span>S</span>
+      <span><span class="ml-dot" style="background:#e67e22"></span>AS(本命)</span>
+      <span><span class="ml-dot" style="background:#d35400"></span>AF</span>
+      <span><span class="ml-dot" style="background:#3498db"></span>B</span>
+      <span><span class="ml-dot" style="background:#7f8c8d"></span>C</span>
+      <span>⭐起点 ／ 数字=選択順(近い順) ／ 緑線=周遊イメージ</span>
+    </div>
+  </div>
   <div class="cand-list" id="cand-list"></div>
   <div class="cand-summary" id="cand-summary"></div>
   <div style="margin-top:14px">
@@ -403,7 +429,9 @@ async function searchCandidates(){
     RANK_ON = {S:true, AS:true, AF:true, B:true, C:true};
     document.getElementById('cand-sort').value = 'score';
     buildRankFilter();
+    setMapView(false);   // 新規検索のたび既定（折りたたみ＝リスト）に戻す
     renderCandidates();
+    if(CAND_ORIGIN_MK && CAND_MAP){ CAND_MAP.removeLayer(CAND_ORIGIN_MK); CAND_ORIGIN_MK = null; } // 起点マーカーを次回再生成
     status.className = 'gen-status ok';
     status.textContent = `✅ ${data.count}件の候補が見つかりました。行く店を選んでください。`;
     document.getElementById('cand-panel').scrollIntoView({behavior:'smooth', block:'start'});
@@ -517,7 +545,15 @@ function renderCandidates(){
     updateCount();
     return;
   }
-  // 絞り込み（ランク／距離／営業中／チェーン）
+  const disp = getDisplayed();
+  list.innerHTML = disp.length
+    ? disp.map(cardHtml).join('')
+    : '<p style="padding:18px;color:#888">選択中のランク条件に合う候補がありません。上のランクフィルタを調整してください。</p>';
+  updateCount();
+}
+
+// 表示対象（フィルタ＋並び替え後）を返す。リストと地図で共用
+function getDisplayed(){
   const maxDist  = parseInt(document.getElementById('filter-dist').value, 10) || 0;
   const openOnly = document.getElementById('filter-open').checked;
   const noChain  = document.getElementById('filter-nochain').checked;
@@ -529,14 +565,10 @@ function renderCandidates(){
     if(noChain && c.chain) return false;
     return true;
   });
-  // 並び替え
   if(document.getElementById('cand-sort').value === 'dist'){
     disp = disp.slice().sort((a,b) => (a.dist_m||0) - (b.dist_m||0));
   }
-  list.innerHTML = disp.length
-    ? disp.map(cardHtml).join('')
-    : '<p style="padding:18px;color:#888">選択中のランク条件に合う候補がありません。上のランクフィルタを調整してください。</p>';
-  updateCount();
+  return disp;
 }
 
 function toggleCard(el){
@@ -561,6 +593,7 @@ function updateCount(){
   const shown = document.querySelectorAll('#cand-list .cand-card').length;
   document.getElementById('cand-count').textContent = `選択中 ${SELECTED.size}件 ／ 表示 ${shown}件`;
   renderSummary();
+  refreshCandMap();   // 地図が開いていればピン・周遊線を同期
 }
 function hav(a1,o1,a2,o2){
   const R=6371000, t=Math.PI/180;
@@ -589,6 +622,79 @@ function renderSummary(){
   bar.innerHTML = `🧮 <strong>選択 ${sel.length}件</strong>（本命S/AS <strong>${honmei}</strong>件）`
     + ` ・ 推定周遊 <strong>約${total}分</strong>（徒歩${walk}分＋滞在${stay}分×${sel.length}）`
     + ` ・ 総移動 約${km}km`;
+}
+
+// ── 地図プレビュー（タブで表示。デフォルトは折りたたみ） ──
+let CAND_MAP = null, CAND_MARKERS = {}, CAND_ROUTE = null, CAND_ORIGIN_MK = null;
+const MAP_COLOR = {S:'#e74c3c',AS:'#e67e22',AF:'#d35400',B:'#3498db',C:'#7f8c8d'};
+
+function setMapView(show){
+  document.getElementById('cand-map-wrap').style.display = show ? 'block' : 'none';
+  document.getElementById('tab-map').classList.toggle('on', show);
+  document.getElementById('tab-list').classList.toggle('on', !show);
+  if(show){ ensureCandMap(); }
+}
+function ensureCandMap(){
+  if(!CAND_MAP){
+    CAND_MAP = L.map('cand-map');
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+      {maxZoom:19, attribution:'© OpenStreetMap'}).addTo(CAND_MAP);
+    if(LAST_ORIGIN) CAND_MAP.setView([LAST_ORIGIN.lat, LAST_ORIGIN.lng], 15);
+  }
+  setTimeout(() => { CAND_MAP.invalidateSize(); fitCandMap(); refreshCandMap(); }, 60);
+}
+function pinIconCand(c, num){
+  const col = MAP_COLOR[rankOf(c)] || '#888';
+  const badge = num ? `<div style="position:absolute;top:-7px;right:-7px;background:#27ae60;color:#fff;width:17px;height:17px;border-radius:50%;font-size:11px;font-weight:bold;line-height:17px;text-align:center;border:1px solid #fff">${num}</div>` : '';
+  return L.divIcon({className:'', iconSize:[22,22], iconAnchor:[11,11],
+    html:`<div style="position:relative;width:22px;height:22px;background:${col};border:2px solid #fff;border-radius:50%;box-shadow:0 1px 3px rgba(0,0,0,.4)">${badge}</div>`});
+}
+function nnOrderSel(){
+  const sel = LAST_CANDIDATES.filter(c => SELECTED.has(c.id) && c.lat && c.lng);
+  if(!LAST_ORIGIN) return sel;
+  let cl=LAST_ORIGIN.lat, cg=LAST_ORIGIN.lng, rest=sel.slice(), ord=[];
+  while(rest.length){
+    let bi=0, bd=Infinity;
+    rest.forEach((c,i)=>{ const d=hav(cl,cg,c.lat,c.lng); if(d<bd){bd=d;bi=i;} });
+    ord.push(rest[bi]); cl=rest[bi].lat; cg=rest[bi].lng; rest.splice(bi,1);
+  }
+  return ord;
+}
+function refreshCandMap(){
+  if(!CAND_MAP || document.getElementById('cand-map-wrap').style.display === 'none') return;
+  Object.values(CAND_MARKERS).forEach(m => CAND_MAP.removeLayer(m)); CAND_MARKERS = {};
+  if(CAND_ROUTE){ CAND_MAP.removeLayer(CAND_ROUTE); CAND_ROUTE = null; }
+  if(LAST_ORIGIN && !CAND_ORIGIN_MK){
+    CAND_ORIGIN_MK = L.marker([LAST_ORIGIN.lat, LAST_ORIGIN.lng], {icon: L.divIcon({className:'',
+      html:'<div style="font-size:24px;transform:translate(-50%,-100%)">⭐</div>', iconSize:[0,0]})}).addTo(CAND_MAP);
+  }
+  const order = nnOrderSel();
+  const numOf = {}; order.forEach((c,i) => numOf[c.id] = i+1);
+  getDisplayed().forEach(c => {
+    if(!c.lat || !c.lng) return;
+    const m = L.marker([c.lat, c.lng], {icon: pinIconCand(c, numOf[c.id])}).addTo(CAND_MAP)
+      .bindPopup(`<b>${esc(c.name)}</b><br>${esc(c.rank)}・勢い${c.momentum||0}・★${esc(c.rating||'-')}<br>起点から${Math.round(c.dist_m||0)}m`);
+    m.on('click', () => selectStore(c.id));
+    CAND_MARKERS[c.id] = m;
+  });
+  if(order.length && LAST_ORIGIN){
+    CAND_ROUTE = L.polyline([[LAST_ORIGIN.lat,LAST_ORIGIN.lng], ...order.map(c=>[c.lat,c.lng])],
+      {color:'#27ae60', weight:3, opacity:.7, dashArray:'6,5'}).addTo(CAND_MAP);
+  }
+}
+function fitCandMap(){
+  const disp = getDisplayed().filter(c => c.lat && c.lng);
+  const pts = disp.map(c => [c.lat, c.lng]);
+  if(LAST_ORIGIN) pts.push([LAST_ORIGIN.lat, LAST_ORIGIN.lng]);
+  if(pts.length >= 2) CAND_MAP.fitBounds(pts, {padding:[30,30], maxZoom:16});
+}
+// 地図ピンのクリックから選択をトグル（カードDOMも同期）
+function selectStore(id){
+  const on = !SELECTED.has(id);
+  if(on) SELECTED.add(id); else SELECTED.delete(id);
+  const card = document.querySelector('#cand-list .cand-card[data-id="'+(window.CSS&&CSS.escape?CSS.escape(id):id)+'"]');
+  if(card){ card.classList.toggle('selected', on); card.querySelector('.cc-check').textContent = on?'✓':''; }
+  updateCount();
 }
 
 // ── STEP 2: ルート作成 ──
