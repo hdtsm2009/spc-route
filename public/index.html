@@ -211,20 +211,20 @@ tr:hover td{background:#f8f9fa}
         <strong>候補を地図で確認できるように</strong><br>
         候補画面に<strong>地図プレビュー</strong>を追加（「🗺 地図で見る」タブ）。ピンの色でランクが分かり、
         選んだ店は番号と線でつながって周遊イメージが掴めます。普段はリスト表示のままで軽快です。</li>
-      <li><span class="cl-date">2026-06-02</span>
-        <strong>候補画面の使い勝手を改善</strong><br>
-        <strong>選択サマリー</strong>（選んだ件数・本命数・推定周遊時間・総距離）、
-        <strong>絞り込み</strong>（徒歩○分以内／営業中のみ／チェーン除く）、エリアチップの地域整理、
-        営業時間判定の精度向上（中抜け・深夜営業に対応）を行いました。</li>
-      <li><span class="cl-date">2026-06-01</span>
-        <strong>本命度の精度向上＋閉店店の除外</strong><br>
-        スポカフェ掲載店に集客力データ（★評価・口コミ数・価格帯）を追加し、
-        <strong>AS（無料掲載＝有料転換の本命）を“勢いの強い順”に並べ替え</strong>。
-        カードに勢いチップを表示。Google上で閉店・移転が確認された店を候補から自動除外しました。</li>
     </ul>
     <details class="cl-more">
       <summary>＋ それ以前の更新履歴</summary>
       <ul class="changelog">
+        <li><span class="cl-date">2026-06-02</span>
+          <strong>候補画面の使い勝手を改善</strong><br>
+          <strong>選択サマリー</strong>（選んだ件数・本命数・推定周遊時間・総距離）、
+          <strong>絞り込み</strong>（徒歩○分以内／営業中のみ／チェーン除く）、エリアチップの地域整理、
+          営業時間判定の精度向上（中抜け・深夜営業に対応）を行いました。</li>
+        <li><span class="cl-date">2026-06-01</span>
+          <strong>本命度の精度向上＋閉店店の除外</strong><br>
+          スポカフェ掲載店に集客力データ（★評価・口コミ数・価格帯）を追加し、
+          <strong>AS（無料掲載＝有料転換の本命）を“勢いの強い順”に並べ替え</strong>。
+          カードに勢いチップを表示。Google上で閉店・移転が確認された店を候補から自動除外しました。</li>
         <li><span class="cl-date">2026-05-30</span>
           <strong>掲載店の住所を地図に補完</strong><br>
           番地のないスポカフェ掲載店をPOIで地図表示（「概算位置」バッジ付き）。</li>
@@ -682,7 +682,7 @@ function renderSummary(){
   const bar = document.getElementById('cand-summary');
   const sel = LAST_CANDIDATES.filter(c => SELECTED.has(c.id));
   if(!sel.length){ bar.style.display='none'; bar.innerHTML=''; return; }
-  bar.style.display='';
+  bar.style.display='block';   // ''だとCSSの display:none に戻り表示されないため明示
   const honmei = sel.filter(c => { const r=rankOf(c); return r==='S'||r==='AS'; }).length;
   const speed=80, stay=15;
   let totalM=0;
