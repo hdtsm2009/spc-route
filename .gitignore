@@ -9,8 +9,14 @@ _output/_archive/
 _output/統合店舗マスタ.csv
 _output/統合店舗マスタ_geocoded.csv
 _output/統合店舗マスタ_v2.csv
-_output/補完_スポカフェ掲載店.csv
-_output/補完_スポカフェ掲載店_POI.csv
+_output/補完_スポカフェ掲載店*.csv
+_output/座標統合データ_*.csv
+# 検証・中間生成物（ローカル専用）
+_output/_検証_*.csv
+_output/_phase06_*.csv
+_output/_ambiguous_*.csv
+_output/_スポカフェ_matched_ids.json
+_output/_新04_取込サマリ.txt
 
 # APIキー（ローカル専用・絶対にコミットしない）
 _config/google_places_key.local

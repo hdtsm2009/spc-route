@@ -203,8 +203,7 @@ def main():
     #   POI(04c, 精度A・実座標) を優先し、POIで取れなかった店だけ地名概算(04b, B) で補う。
     base_cols = set(rows[0].keys()) if rows else set()
     suppl_files = [
-        ("POI", os.path.join(BASE, "_output", "補完_スポカフェ掲載店_POI.csv")),
-        ("地名概算", os.path.join(BASE, "_output", "補完_スポカフェ掲載店.csv")),
+        ("GSI公式", os.path.join(BASE, "_output", "補完_スポカフェ掲載店_GSI.csv")),
     ]
     seen_ids = set()
     added = 0

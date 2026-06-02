@@ -1,18 +1,19 @@
 """フェーズ06: AS店に勢い(評価/口コミ/価格)を還元＋勢いスコア列追加＋閉店/誤検出を除外。
 
-入力:
-  _output/統合店舗マスタ_v2.csv        … フェーズ05出力
-  _data/places_enrich_cache.json       … 04d取得の評価/口コミ/価格/営業状況
-  _output/_閉店検証_L1L2.csv           … 多段検証の確信度
-  _data/l3_verdicts.json               … L3=Web独立確認
-出力:
-  _output/統合店舗マスタ_v2.csv        … 上書き（_archiveにバックアップ）
-    追加/更新列: 評価/口コミ数/予算(空欄のみ補完), 勢いスコア, 営業ランク(閉店/誤検出→除外), 除外理由
+★正攻法移行版（store_id非依存・正規化店名キー）:
+  正本ソース差し替えで store_id 体系が変わるため、勢い/閉店/誤検出を **正規化店名キー** で引き継ぐ。
+  - 勢い(enrich): 店名キーで適用（軽傷。同名衝突は口コミ最大を採用）。
+  - 閉店/誤検出除外: **一意解決時のみ適用**（閉店セット内で一意 かつ v2内で一意）。
+    非一意は適用見送り＋ _ambiguous_phase06.csv（候補からは落とさない＝誤爆防止）。
+  - 公式GSI座標(ソース=スポカフェ公式(番地GSI))には再ジオ上書きを適用しない（座標優先=公式GSI）。
 
-判定の取り込み（スポカフェ閉店済みリスト生成.py と同じ三重検証ロジック）:
-  閉店確定(三重/二重) → ランク除外「閉店確定」
-  誤検出(L1低)        → ランク除外「POI名一致弱(座標要再確認)」※stores.jsonには残し復元可
-  営業中疑い(L3矛盾)  → 除外しない（要確認のまま候補に残す）
+2モード:
+  python フェーズ06...py --dry-run   # 移行レポートのみ出力（v2は書き換えない）
+  python フェーズ06...py             # 本適用（v2上書き・_archiveにバックアップ）
+
+入力: _output/統合店舗マスタ_v2.csv, _data/places_enrich_cache.json,
+      _output/_閉店検証_L1L2.csv, _data/l3_verdicts.json
+出力: v2上書き / _output/_phase06_移行レポート.csv / _output/_ambiguous_phase06.csv
 """
 import os
 import csv
@@ -20,7 +21,12 @@ import sys
 import json
 import math
 import shutil
+import argparse
+import collections
 import importlib.util
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from normalize import norm_name  # noqa
 
 ROOT = r"G:\マイドライブ\作業フォルダ2025～\Claude作業フォルダ\Claudecode スポカフェ"
 BASE = os.path.join(ROOT, "訪問店舗提案サービス")
@@ -28,13 +34,14 @@ V2 = os.path.join(BASE, "_output", "統合店舗マスタ_v2.csv")
 ENRICH = os.path.join(BASE, "_data", "places_enrich_cache.json")
 L1L2 = os.path.join(BASE, "_output", "_閉店検証_L1L2.csv")
 L3J = os.path.join(BASE, "_data", "l3_verdicts.json")
-REGEO = os.path.join(BASE, "_output", "_誤検出再ジオコーディング_結果.csv")
 V2_BACKUP = os.path.join(BASE, "_output", "_archive", "統合店舗マスタ_v2_前フェーズ06.csv")
+REPORT = os.path.join(BASE, "_output", "_phase06_移行レポート.csv")
+AMBIG = os.path.join(BASE, "_output", "_ambiguous_phase06.csv")
 
+# clean_name / load_keizai_unmatched / within_city は enrichキャッシュのキー再生成に流用
 _spec = importlib.util.spec_from_file_location(
     "p04c", os.path.join(BASE, "_scripts", "フェーズ04c_店名POIジオコーディング.py"))
 p04c = importlib.util.module_from_spec(_spec)
-sys.path.insert(0, os.path.join(BASE, "_scripts"))
 _spec.loader.exec_module(p04c)
 
 PRICE_MAP = {"PRICE_LEVEL_FREE": "¥", "PRICE_LEVEL_INEXPENSIVE": "¥",
@@ -58,101 +65,86 @@ def momentum(rating, reviews, price_sym):
     return round(vol + qual + pscore)
 
 
-def build_enrich_map():
-    """store_id → {rating,reviews,price_sym}（within_city通過分のみ採用）。"""
+def build_enrich_by_name():
+    """正規化店名 → {rating,reviews,price}。enrichキャッシュ(クエリ=店名+市区町村+都道府県)を
+    旧マスタの店名で再構成して引く（within_city通過のみ）。同名衝突は口コミ最大を採用（軽傷）。"""
     cache = json.load(open(ENRICH, encoding="utf-8"))
     m = {}
     for rec in p04c.load_keizai_unmatched():
         pref, city = rec["都道府県"], rec["市区町村"]
         q = f"{p04c.clean_name(rec['店名'])} {city} {pref}"
         v = cache.get(q)
-        if not v:
+        if not v or not p04c.within_city(v.get("addr", ""), pref, city):
             continue
-        if not p04c.within_city(v.get("addr", ""), pref, city):
-            continue  # 別市/海外の誤一致は採用しない
-        sid = p04c.store_id(rec["店名"], pref, city)
-        m[sid] = {
-            "rating": v.get("rating"),
-            "reviews": v.get("reviews"),
-            "price": PRICE_MAP.get(v.get("price", ""), ""),
-        }
+        nn = norm_name(rec["店名"])
+        if not nn:
+            continue
+        cand = {"rating": v.get("rating"), "reviews": v.get("reviews"),
+                "price": PRICE_MAP.get(v.get("price", ""), "")}
+        prev = m.get(nn)
+        if prev is None or _f(cand["reviews"]) > _f(prev["reviews"]):
+            m[nn] = cand
     return m
 
 
-def build_exclusion_sets():
-    """店舗ID(SPMハッシュ) → 除外理由。閉店確定/誤検出を分ける。"""
+def build_exclusion_by_name():
+    """正規化店名 → (tag, kind)。閉店確定/誤検出。閉店セット内で同名複数の店名は
+    ambiguous として除外（_ambiguous_phase06.csv へ・適用しない）。"""
     rows = list(csv.DictReader(open(L1L2, encoding="utf-8-sig")))
     l3 = json.load(open(L3J, encoding="utf-8"))
-    closed, falsepos = {}, {}
+    by_name = collections.defaultdict(list)  # nn -> list of (tag, kind, 店名, 都道府県, 市区町村)
     for r in rows:
-        sid = p04c.store_id(r["店名"], r["都道府県"], r["市区町村"])
+        nn = norm_name(r["店名"])
+        if not nn:
+            continue
         l3v = l3.get(r["店名"], {}).get("verdict", "")
         if r["確信度"] == "低":
-            falsepos[sid] = "POI名一致弱(座標要再確認)"
+            by_name[nn].append(("POI名一致弱(座標要再確認)", "falsepos", r["店名"], r["都道府県"], r["市区町村"]))
         elif l3v == "営業中疑い":
             continue  # 要確認 → 除外しない
         elif r["確信度"] in ("高", "中"):
             tag = "閉店確定(Web確認済)" if l3v == "閉店確定" else "閉店確定(要現地確認)"
-            closed[sid] = tag
-    return closed, falsepos
-
-
-def build_regeo_override():
-    """誤検出のうち再ジオコーディングで店名+市/県一致した店を復活。
-    店舗ID(SPM) → {lat,lng,rating,reviews,closed}。確信度『高』かつ営業中のみ採用。"""
-    if not os.path.exists(REGEO):
-        return {}
-    m = {}
-    for r in csv.DictReader(open(REGEO, encoding="utf-8-sig")):
-        if r["確信度"] != "高" or not r["新緯度"]:
-            continue  # 高=店名+市一致のみ採用（中は別支店誤マッチ多く不採用）
-        m[r["店舗ID"]] = {
-            "lat": r["新緯度"], "lng": r["新経度"],
-            "rating": r.get("評価", ""), "reviews": r.get("口コミ数", ""),
-            "closed": r["営業状況"] in ("CLOSED_PERMANENTLY", "CLOSED_TEMPORARILY"),
-            "店名": r["店名"], "住所": r.get("採用住所", ""), "プラン": r.get("プラン", ""),
-        }
-    return m
+            by_name[nn].append((tag, "closed", r["店名"], r["都道府県"], r["市区町村"]))
+    uniq, ambiguous = {}, []
+    for nn, lst in by_name.items():
+        kinds = {x[1] for x in lst}
+        # 同名で複数エントリ（別店混在の恐れ）or closed/falsepos混在 → 適用見送り
+        if len(lst) > 1 or len(kinds) > 1:
+            ambiguous.append((nn, lst))
+            continue
+        tag, kind = lst[0][0], lst[0][1]
+        uniq[nn] = (tag, kind)
+    return uniq, ambiguous
 
 
 def main():
-    for p in (ENRICH, L1L2, L3J):
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--dry-run", action="store_true", help="移行レポートのみ・v2は書き換えない")
+    args = ap.parse_args()
+
+    for p in (V2, ENRICH, L1L2, L3J):
         if not os.path.exists(p):
             print(f"❌ 入力が無い: {p}"); sys.exit(1)
-    # 再実行を冪等にするため、フェーズ05のクリーン出力(=06前バックアップ)があればそれを入力に使う
+    # 冪等化: フェーズ05クリーン出力(=06前バックアップ)があればそれを入力に
     src = V2_BACKUP if os.path.exists(V2_BACKUP) else V2
-    print(f"入力: {src}")
     rows = list(csv.DictReader(open(src, encoding="utf-8-sig")))
     fieldnames = list(rows[0].keys())
     if "勢いスコア" not in fieldnames:
-        # 営業スコアの後ろに挿入
         i = fieldnames.index("営業スコア") + 1 if "営業スコア" in fieldnames else len(fieldnames)
         fieldnames = fieldnames[:i] + ["勢いスコア"] + fieldnames[i:]
 
-    enrich = build_enrich_map()
-    closed, falsepos = build_exclusion_sets()
-    regeo = build_regeo_override()
+    enrich = build_enrich_by_name()
+    excl, ambiguous = build_exclusion_by_name()
 
-    n_fill = n_mom = n_closed = n_fp = n_revived = 0
+    # v2内の正規化店名出現数（一意判定に使用）
+    name_count = collections.Counter(norm_name(r.get("店名", "")) for r in rows)
+
+    n_fill = n_mom = n_closed = n_fp = n_excl_ambig = 0
+    ambig_log = []
     for r in rows:
-        sid = r.get("店舗ID", "")
-        # 0) 再ジオコーディング復活（誤検出だが店名+市一致で正座標が取れた店）
-        rg = regeo.get(sid)
-        if rg:
-            if rg["closed"]:
-                closed[sid] = "閉店確定(再取得で判明)"      # 復活せず閉店扱い
-            else:
-                falsepos.pop(sid, None)                      # 誤検出指定を解除＝復活
-                r["緯度"], r["経度"] = rg["lat"], rg["lng"]
-                r["ジオコーディング精度"] = "詳細(POI再取得)"
-                r["geo_quality"] = "A"
-                if rg["rating"]:
-                    r["評価"] = rg["rating"]
-                if rg["reviews"]:
-                    r["口コミ数"] = rg["reviews"]
-                n_revived += 1
-        # 1) 評価/口コミ/予算 を空欄のみ補完（within_city通過のAS）
-        e = enrich.get(sid)
+        nn = norm_name(r.get("店名", ""))
+        # 1) 勢い: 店名キーで補完（空欄のみ）
+        e = enrich.get(nn)
         if e:
             if not str(r.get("評価", "")).strip() and e["rating"]:
                 r["評価"] = e["rating"]; n_fill += 1
@@ -160,79 +152,67 @@ def main():
                 r["口コミ数"] = e["reviews"]
             if not str(r.get("予算", "")).strip() and e["price"]:
                 r["予算"] = e["price"]
-        # 2) 勢いスコア（評価/口コミから・全ランク共通の2次ソートキー）
-        price_sym = (e["price"] if e else "") or (r.get("予算", "") if r.get("予算", "").startswith("¥") else "")
+        # 2) 勢いスコア
+        price_sym = (e["price"] if e else "") or (r.get("予算", "") if str(r.get("予算", "")).startswith("¥") else "")
         mom = momentum(r.get("評価"), r.get("口コミ数"), price_sym)
         r["勢いスコア"] = mom
         if mom:
             n_mom += 1
-        # 3) 閉店/誤検出を除外
-        if sid in closed:
-            r["営業ランク"] = "除外"
-            r["除外理由"] = (r.get("除外理由", "") + " / " if r.get("除外理由") else "") + closed[sid]
-            n_closed += 1
-        elif sid in falsepos:
-            r["営業ランク"] = "除外"
-            r["除外理由"] = (r.get("除外理由", "") + " / " if r.get("除外理由") else "") + falsepos[sid]
-            n_fp += 1
+        # 3) 閉店/誤検出除外（一意解決時のみ：閉店セット一意 かつ v2内で同名一意）
+        if nn and nn in excl:
+            if name_count[nn] == 1:
+                tag, kind = excl[nn]
+                r["営業ランク"] = "除外"
+                r["除外理由"] = (r.get("除外理由", "") + " / " if r.get("除外理由") else "") + tag
+                if kind == "closed":
+                    n_closed += 1
+                else:
+                    n_fp += 1
+            else:
+                n_excl_ambig += 1
+                ambig_log.append((nn, r.get("店名", ""), "v2内同名複数で除外見送り"))
 
-    # 再ジオ確度『高』かつ営業中の店を復活。同名の既存行があれば上書き復活、無ければ新規追加。
-    existing = {r.get("店舗ID", "") for r in rows}
-    by_name = {}
-    for r in rows:
-        by_name.setdefault(r.get("店名", ""), r)
-    n_added = 0
-    for sid, rg in regeo.items():
-        if rg["closed"] or sid in existing or not rg.get("店名"):
-            continue
-        mom = momentum(rg["rating"], rg["reviews"], "")
-        ex = by_name.get(rg["店名"])
-        if ex is not None:
-            # 既存（誤検出で除外された）行を正しい座標で復活
-            ex.update({
-                "緯度": rg["lat"], "経度": rg["lng"],
-                "営業ランク": "AS", "営業スコア": 120 + mom, "勢いスコア": mom,
-                "除外理由": "", "geo_quality": "A", "ジオコーディング精度": "詳細(POI再取得)",
-            })
-            if rg["rating"]:
-                ex["評価"] = rg["rating"]
-            if rg["reviews"]:
-                ex["口コミ数"] = rg["reviews"]
-            n_revived += 1
-            continue
-        new = {fn: "" for fn in fieldnames}
-        new.update({
-            "店舗ID": sid, "店名": rg["店名"], "住所": rg["住所"],
-            "緯度": rg["lat"], "経度": rg["lng"],
-            "営業ランク": "AS", "営業スコア": 120 + mom, "勢いスコア": mom,
-            "スコア理由": "スポカフェ掲載(再取得POIで座標復活)/無料→有料転換",
-            "ソース": "スポカフェマスタ補完(POI再取得)",
-            "スポカフェ掲載": "○", "スポカフェプラン": rg["プラン"], "ファンスタ掲載": "",
-            "評価": rg["rating"], "口コミ数": rg["reviews"],
-            "geo_quality": "A", "ジオコーディング精度": "詳細(POI再取得)",
-        })
-        rows.append(new)
-        n_added += 1
+    for nn, lst in ambiguous:
+        ambig_log.append((nn, " | ".join(x[2] for x in lst), "閉店セット内で同名複数/種別混在"))
 
-    # フェーズ05クリーン出力のバックアップは初回のみ作成（再実行で壊さない）
+    # レポート出力
+    with open(REPORT, "w", encoding="utf-8-sig", newline="") as fp:
+        w = csv.writer(fp)
+        w.writerow(["指標", "件数"])
+        w.writerow(["勢い補完(評価)", n_fill])
+        w.writerow(["勢いスコア>0", n_mom])
+        w.writerow(["閉店除外(適用)", n_closed])
+        w.writerow(["誤検出除外(適用)", n_fp])
+        w.writerow(["除外見送り(v2内同名複数)", n_excl_ambig])
+        w.writerow(["閉店セット内ambiguous店名", len(ambiguous)])
+    with open(AMBIG, "w", encoding="utf-8-sig", newline="") as fp:
+        w = csv.writer(fp)
+        w.writerow(["norm_name", "店名", "理由"])
+        w.writerows(ambig_log)
+
+    print("=" * 56)
+    print(f"{'[DRY-RUN] ' if args.dry_run else ''}フェーズ06 移行レポート")
+    print(f"  勢い補完: {n_fill} / 勢いスコア>0: {n_mom}")
+    print(f"  閉店除外(適用): {n_closed} / 誤検出除外(適用): {n_fp}")
+    print(f"  除外見送り(v2内同名複数): {n_excl_ambig} / 閉店セット内ambiguous: {len(ambiguous)}")
+    print(f"  レポート: {REPORT} / ambiguous: {AMBIG}")
+    asr = [r for r in rows if r.get("営業ランク") == "AS"]
+    asr.sort(key=lambda r: -int(r.get("勢いスコア") or 0))
+    print(f"  AS残: {len(asr)} 件。勢い上位5:")
+    for r in asr[:5]:
+        print(f"    勢{r['勢いスコア']:3} ★{r.get('評価') or '-'} 口{r.get('口コミ数') or '-':>5} {r.get('店名','')[:24]}")
+
+    if args.dry_run:
+        print(">>> DRY-RUN: v2は書き換えていません。問題なければ --dry-run 無しで本適用してください。")
+        return
+
     os.makedirs(os.path.dirname(V2_BACKUP), exist_ok=True)
     if not os.path.exists(V2_BACKUP):
         shutil.copy2(V2, V2_BACKUP)
     with open(V2, "w", encoding="utf-8-sig", newline="") as fp:
         w = csv.DictWriter(fp, fieldnames=fieldnames, extrasaction="ignore")
         w.writeheader(); w.writerows(rows)
-
-    print("=" * 56)
-    print(f"出力(上書き): {V2}  （バックアップ: _output/_archive/）")
-    print(f"  評価補完: {n_fill} 件 / 勢いスコア付与: {n_mom} 件")
-    print(f"  再ジオコーディング復活: 既存更新{n_revived} 件 / 新規追加{n_added} 件")
-    print(f"  閉店除外: {n_closed} 件 / 誤検出除外: {n_fp} 件")
-    # AS勢い上位を確認
-    asr = [r for r in rows if r.get("営業ランク") == "AS"]
-    asr.sort(key=lambda r: -int(r.get("勢いスコア") or 0))
-    print(f"  AS残: {len(asr)} 件。勢い上位5:")
-    for r in asr[:5]:
-        print(f"    勢{r['勢いスコア']:3} ★{r.get('評価') or '-'} 口{r.get('口コミ数') or '-':>5} {r.get('店名','')[:24]}")
+    print(f"✅ 本適用: {V2} を上書き（バックアップ: _archive/）")
 
 
 if __name__ == "__main__":

@@ -12,6 +12,7 @@ import json
 import hashlib
 import shutil
 import tempfile
+import collections
 
 import openpyxl
 
@@ -222,37 +223,85 @@ def from_spacemarket(rows):
     return out
 
 
+# 新公式エクスポート（番地付き・ステータス列あり）。ヘッダー名参照・列番号非依存。
+SPOCAFE_REQUIRED = ["店舗ID", "ステータス", "住所", "建物", "電話番号", "郵便番号",
+                    "タグ：都道府県", "タグ：市区町村", "プラン", "店舗名", "営業時間"]
+
+
+def _pref_city_official(row):
+    """タグ優先・空なら住所からフォールバックで (都道府県, 市区町村)。"""
+    pref = (row.get("タグ：都道府県") or "").strip()
+    city = (row.get("タグ：市区町村") or "").strip()
+    if not pref or not city:
+        p, c = extract_pref_city(row.get("住所", ""))
+        pref = pref or p
+        city = city or c
+    return pref, city
+
+
 def load_spocafe_master(path):
-    """ID行→店名行→タブ区切り行 のレコード形式をパース。
-    返り値: {正規化店名キー: {店名, 都道府県, 市区町村}}"""
-    with open(path, encoding="utf-8") as fp:
-        lines = [ln.rstrip("\n") for ln in fp]
-    listed = {}
-    i = 0
-    n = len(lines)
-    # タブ区切り行の列位置: 0国 1都道府県 2その他住所 3地名 4スポーツ
-    #                       5その他 6メモ 7プラン 8ランク 9自動更新 10状態 11AC
-    while i < n:
-        ln = lines[i].strip()
-        if ln.isdigit():  # ID行
-            name = lines[i + 1].strip() if i + 1 < n else ""
-            tab = lines[i + 2].split("\t") if i + 2 < n else []
-            pref = tab[1].strip() if len(tab) > 1 else ""
-            city = tab[2].strip() if len(tab) > 2 else ""
-            plan = tab[7].strip() if len(tab) > 7 else ""
-            state = tab[10].strip() if len(tab) > 10 else ""
-            i += 3
-            # 状態が「掲載」のレコードのみ"掲載中"として扱う
-            #（状態空欄＝取り下げ/未公開はスポカフェ掲載とみなさない）
-            if state != "掲載":
-                continue
-            info = {"店名": name, "都道府県": pref, "市区町村": city, "プラン": plan}
-            # 表記ゆれ吸収のため複数キーで登録（先勝ち＝完全一致キーを優先）
-            for key in name_keys(name):
-                listed.setdefault(key, info)
-        else:
-            i += 1
-    return listed
+    """新公式エクスポート(ステータス=掲載のみ)を読み、突合用の三層インデックスを返す。
+    店名単体での誤マッチを防ぐため、各層は一意に解決できるキーだけを採用する。
+    返り値 dict: by_phone / by_npc / by_name / all / phone_ambiguous"""
+    rows = list(csv.DictReader(open(path, encoding="utf-8-sig")))
+    if not rows:
+        raise SystemExit(f"空CSV: {path}")
+    miss = [c for c in SPOCAFE_REQUIRED if c not in rows[0]]
+    if miss:
+        raise SystemExit(f"必須列が無い(fail fast): {miss}")
+    infos = []
+    seen_id = set()
+    for r in rows:
+        if (r.get("ステータス") or "").strip() != "掲載":
+            continue  # 停止/審査はドロップ
+        sid = (r.get("店舗ID") or "").strip()
+        if sid in seen_id:
+            continue  # 数値ID重複は先勝ち
+        seen_id.add(sid)
+        pref, city = _pref_city_official(r)
+        infos.append({
+            "数値ID": sid, "店名": (r.get("店舗名") or "").strip(),
+            "都道府県": pref, "市区町村": city, "プラン": (r.get("プラン") or "").strip(),
+            "住所": (r.get("住所") or "").strip(), "建物": (r.get("建物") or "").strip(),
+            "電話": norm_phone(r.get("電話番号", "")), "郵便番号": (r.get("郵便番号") or "").strip(),
+            "営業時間": (r.get("営業時間") or "").strip(),
+        })
+    # by_phone: 同一電話に複数の異なる数値ID → phone_ambiguous（自動確定しない）
+    phone_map = collections.defaultdict(list)
+    for inf in infos:
+        if inf["電話"]:
+            phone_map[inf["電話"]].append(inf)
+    by_phone = {p: v[0] for p, v in phone_map.items() if len({x["数値ID"] for x in v}) == 1}
+    phone_ambiguous = {p for p, v in phone_map.items() if len({x["数値ID"] for x in v}) > 1}
+    # by_npc: (店名,都道府県,市区町村) 一意のみ
+    npc_map = collections.defaultdict(list)
+    for inf in infos:
+        npc_map[(norm_name(inf["店名"]), inf["都道府県"], inf["市区町村"])].append(inf)
+    by_npc = {k: v[0] for k, v in npc_map.items() if len({x["数値ID"] for x in v}) == 1}
+    # by_name: name_keys 一意のみ（複数店に当たるキーは捨てる＝店名単体誤マッチ防止）
+    nk_map = collections.defaultdict(list)
+    for inf in infos:
+        for k in name_keys(inf["店名"]):
+            nk_map[k].append(inf)
+    by_name = {k: v[0] for k, v in nk_map.items() if len({x["数値ID"] for x in v}) == 1}
+    return {"by_phone": by_phone, "by_npc": by_npc, "by_name": by_name,
+            "all": infos, "phone_ambiguous": phone_ambiguous}
+
+
+def resolve_spocafe(spo, name, phone, addr):
+    """店舗を一意解決して info を返す。解決順: 電話(一意) → (店名+pref+city) → 店名キー(一意)。
+    一意に解決できなければ None（店名単体での自動一致はしない）。"""
+    pk = norm_phone(phone)
+    if pk and pk in spo["by_phone"]:
+        return spo["by_phone"][pk]
+    p, c = extract_pref_city(addr)
+    info = spo["by_npc"].get((norm_name(name), p, c))
+    if info:
+        return info
+    for nk in name_keys(name):
+        if nk in spo["by_name"]:
+            return spo["by_name"][nk]
+    return None
 
 
 def load_fansta_master(path):
@@ -316,13 +365,14 @@ def main():
     print(f"名寄せ後 ユニーク店舗={len(merged)}")
 
     print("掲載マスタ突合中...")
-    spocafe = load_spocafe_master(os.path.join(MASTER, "店舗一覧マスタ_20260331.txt"))
+    spocafe = load_spocafe_master(os.path.join(MASTER, "スポカフェ公式エクスポート_20260602.csv"))
     fansta = load_fansta_master(os.path.join(MASTER, "ファンスタ収集データ_20260416.xlsx"))
-    print(f"  スポカフェ掲載={len(spocafe)} ファンスタ掲載={len(fansta)}")
+    print(f"  スポカフェ掲載(公式)={len(spocafe['all'])} 電話衝突={len(spocafe['phone_ambiguous'])} ファンスタ={len(fansta)}")
 
     print("店舗IDを割り当て中（永続IDマップ使用）...")
     id_map = load_id_map()
     prev_count = len(id_map)
+    matched_spocafe_ids = set()  # scrapeに名寄せできたスポカフェ数値ID（新04の重複防止に共有）
 
     for e in merged:
         nk = norm_name(e["店名"])
@@ -331,10 +381,13 @@ def main():
         nk = norm_name(e["店名"])
         pk = norm_phone(e["電話番号"])
         rec_keys = name_keys(e["店名"])
-        spo_hit = rec_keys & spocafe.keys()
-        e["スポカフェ掲載"] = "○" if spo_hit else ""
+        # スポカフェ掲載は一意解決時のみ（電話→店名+pref+city→店名キー一意）。店名単体誤マッチ防止。
+        spo_info = resolve_spocafe(spocafe, e["店名"], e["電話番号"], e["住所"])
+        e["スポカフェ掲載"] = "○" if spo_info else ""
         # 掲載中ならプランも保持（フリー＝無料掲載＝有料転換の営業先）
-        e["スポカフェプラン"] = spocafe[next(iter(spo_hit))]["プラン"] if spo_hit else ""
+        e["スポカフェプラン"] = spo_info["プラン"] if spo_info else ""
+        if spo_info:
+            matched_spocafe_ids.add(spo_info["数値ID"])
         in_fansta = bool(rec_keys & fansta.keys()) or (
             pk and any(f.get("電話") == pk for f in fansta.values()))
         e["ファンスタ掲載"] = "○" if in_fansta else ""
@@ -349,6 +402,9 @@ def main():
         e["ソース"] = "+".join(sorted(e["ソース"]))
 
     save_id_map(id_map)
+    # 新04（スポカフェ専用店の追加）が重複なく動くよう、名寄せ済み数値IDを共有
+    with open(os.path.join(OUT, "_スポカフェ_matched_ids.json"), "w", encoding="utf-8") as fp:
+        json.dump(sorted(matched_spocafe_ids), fp, ensure_ascii=False)
     new_ids = len(id_map) - prev_count
     print(f"  新規ID発行: {new_ids}件 / 既存ID再利用: {len(merged) - new_ids}件")
 
