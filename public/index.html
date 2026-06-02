@@ -76,8 +76,15 @@ a:hover{text-decoration:underline}
 .cand-count{font-size:13px;color:#2c3e50;font-weight:bold;white-space:nowrap}
 .filter-chk{font-size:12px;color:#556;display:inline-flex;align-items:center;gap:3px;cursor:pointer;white-space:nowrap}
 .cand-summary{margin-top:10px;padding:9px 13px;background:#f3fbf6;border:1px solid #b8e0c8;
-              border-radius:6px;font-size:12.5px;color:#1e6e43;display:none}
+              border-radius:6px;font-size:12.5px;color:#1e6e43;display:none;
+              position:sticky;bottom:8px;z-index:5;box-shadow:0 2px 10px rgba(0,0,0,.1);
+              align-items:center;gap:10px}
+.cand-summary.show{display:flex}
+#cand-summary-text{flex:1;min-width:0}
+.cand-summary .btn-go{white-space:nowrap;padding:8px 16px}
 .cand-summary strong{color:#16633a}
+.omakase{font-size:12px;cursor:pointer;color:#8e44ad;font-weight:bold;white-space:nowrap}
+.omakase:hover{text-decoration:underline}
 /* 地図タブ・地図 */
 .map-tabs{display:flex;gap:4px;margin:4px 0 10px}
 .map-tab{font-size:12px;padding:6px 16px;border:1px solid #ccd;background:#fff;border-radius:7px;
@@ -199,6 +206,10 @@ tr:hover td{background:#f8f9fa}
   <div class="guide-body">
     <ul class="changelog">
       <li><span class="cl-date">2026-06-02</span>
+        <strong>ルート作成をワンタップ化＋おまかせ選択</strong><br>
+        画面下に<strong>選択サマリー＋「🗺 ルート作成」ボタンを固定</strong>表示（スクロール不要）。
+        「<strong>✨ おまかせ選択</strong>」で近くて本命の店を自動で数件選択、「<strong>選択中のみ</strong>」で発行前に見返せます。</li>
+      <li><span class="cl-date">2026-06-02</span>
         <strong>掲載店データを公式最新版に刷新（新規約260店を追加）</strong><br>
         スポカフェ掲載店の元データを<strong>公式の最新エクスポート（番地付き）</strong>に切替。
         これまで載っていなかった<strong>新しい掲載店を取り込み</strong>、停止した店は自動的に除外。
@@ -207,14 +218,14 @@ tr:hover td{background:#f8f9fa}
         <strong>訪問結果の記録・接触履歴の表示（チーム共有）</strong><br>
         各候補に「訪問済・興味あり・NG」等を<strong>その場で記録</strong>でき、誰がいつ何をしたかが
         カードに出ます（<strong>未接触／🟣◯◯が訪問済</strong>）。「未接触のみ」表示でチームの二重訪問を防げます。</li>
-      <li><span class="cl-date">2026-06-02</span>
-        <strong>候補を地図で確認できるように</strong><br>
-        候補画面に<strong>地図プレビュー</strong>を追加（「🗺 地図で見る」タブ）。ピンの色でランクが分かり、
-        選んだ店は番号と線でつながって周遊イメージが掴めます。普段はリスト表示のままで軽快です。</li>
     </ul>
     <details class="cl-more">
       <summary>＋ それ以前の更新履歴</summary>
       <ul class="changelog">
+        <li><span class="cl-date">2026-06-02</span>
+          <strong>候補を地図で確認できるように</strong><br>
+          候補画面に<strong>地図プレビュー</strong>を追加（「🗺 地図で見る」タブ）。ピンの色でランクが分かり、
+          選んだ店は番号と線でつながって周遊イメージが掴めます。普段はリスト表示のままで軽快です。</li>
         <li><span class="cl-date">2026-06-02</span>
           <strong>候補画面の使い勝手を改善</strong><br>
           <strong>選択サマリー</strong>（選んだ件数・本命数・推定周遊時間・総距離）、
@@ -334,6 +345,8 @@ tr:hover td{background:#f8f9fa}
       <label class="filter-chk"><input type="checkbox" id="filter-open" onchange="renderCandidates()">🟢営業中のみ</label>
       <label class="filter-chk"><input type="checkbox" id="filter-nochain" onchange="renderCandidates()">チェーン除く</label>
       <label class="filter-chk"><input type="checkbox" id="filter-unvisited" onchange="renderCandidates()">未接触のみ</label>
+      <label class="filter-chk"><input type="checkbox" id="filter-selected" onchange="renderCandidates()">選択中のみ</label>
+      <a class="omakase" onclick="autoPick()">✨ おまかせ選択</a>
       <span class="rank-filter" id="rank-filter"></span>
     </div>
     <span class="cand-count" id="cand-count"></span>
@@ -354,9 +367,9 @@ tr:hover td{background:#f8f9fa}
     </div>
   </div>
   <div class="cand-list" id="cand-list"></div>
-  <div class="cand-summary" id="cand-summary"></div>
-  <div style="margin-top:14px">
-    <button class="btn btn-go" id="route-btn" onclick="generatePlan()">🗺 選んだ店でルート作成</button>
+  <div class="cand-summary" id="cand-summary">
+    <span id="cand-summary-text"></span>
+    <button class="btn btn-go" id="route-btn" onclick="generatePlan()">🗺 ルート作成</button>
   </div>
   <div class="gen-status" id="route-status"></div>
 </div>
@@ -467,6 +480,7 @@ async function searchCandidates(){
     SELECTED = new Set(LAST_CANDIDATES.slice(0, 8).map(c => c.id)); // 上位8件を初期選択
     RANK_ON = {S:true, AS:true, AF:true, B:true, C:true};
     document.getElementById('cand-sort').value = 'score';
+    document.getElementById('filter-selected').checked = false;  // 新規検索で「選択中のみ」解除
     buildRankFilter();
     setMapView(false);   // 新規検索のたび既定（折りたたみ＝リスト）に戻す
     renderCandidates();
@@ -632,8 +646,10 @@ function getDisplayed(){
   const openOnly = document.getElementById('filter-open').checked;
   const noChain  = document.getElementById('filter-nochain').checked;
   const unvisited = document.getElementById('filter-unvisited').checked;
+  const selOnly  = document.getElementById('filter-selected').checked;
   let disp = LAST_CANDIDATES.filter(c => {
     const r = rankOf(c);
+    if(selOnly && !SELECTED.has(c.id)) return false;
     if(RANK_KEYS.includes(r) && !RANK_ON[r]) return false;
     if(maxDist && (c.dist_m || 0) > maxDist) return false;
     if(openOnly && c.open_status !== '開いている可能性高') return false;
@@ -665,6 +681,20 @@ function selectAll(on){
   updateCount();
 }
 function selectedIds(){ return Array.from(SELECTED); }
+// おまかせ：近くて本命の店を自動で数件選ぶ（徒歩10分以内を優先し本命度順で上位N）
+function autoPick(){
+  document.getElementById('filter-selected').checked = false; // 選択中のみは解除
+  const N = 6;
+  const pool = getDisplayed();           // 現在のランク/距離/営業フィルタ＋並び順を尊重
+  if(!pool.length){ return; }
+  const near = pool.filter(c => (c.dist_m || 0) <= 800);
+  const base = near.length >= N ? near : pool;   // 徒歩10分以内が足りれば近場優先
+  SELECTED = new Set(base.slice(0, N).map(c => c.id));
+  renderCandidates();
+  const st = document.getElementById('route-status');
+  st.className = 'gen-status ok';
+  st.textContent = `✨ 近くて本命の${Math.min(N, base.length)}件を選びました。調整してルート作成へ。`;
+}
 function updateCount(){
   const shown = document.querySelectorAll('#cand-list .cand-card').length;
   document.getElementById('cand-count').textContent = `選択中 ${SELECTED.size}件 ／ 表示 ${shown}件`;
@@ -680,9 +710,10 @@ function hav(a1,o1,a2,o2){
 // 選択中の合計サマリー（件数・本命数・推定周遊時間・総移動距離）。地図なしでD5を可視化
 function renderSummary(){
   const bar = document.getElementById('cand-summary');
+  const txt = document.getElementById('cand-summary-text');
   const sel = LAST_CANDIDATES.filter(c => SELECTED.has(c.id));
-  if(!sel.length){ bar.style.display='none'; bar.innerHTML=''; return; }
-  bar.style.display='block';   // ''だとCSSの display:none に戻り表示されないため明示
+  if(!sel.length){ bar.classList.remove('show'); txt.innerHTML=''; return; }
+  bar.classList.add('show');   // sticky下部固定バーを表示（ルート作成ボタンは常駐）
   const honmei = sel.filter(c => { const r=rankOf(c); return r==='S'||r==='AS'; }).length;
   const speed=80, stay=15;
   let totalM=0;
@@ -695,7 +726,7 @@ function renderSummary(){
     }
   }
   const walk=Math.round(totalM/speed), total=walk+stay*sel.length, km=(totalM/1000).toFixed(1);
-  bar.innerHTML = `🧮 <strong>選択 ${sel.length}件</strong>（本命S/AS <strong>${honmei}</strong>件）`
+  txt.innerHTML = `🧮 <strong>選択 ${sel.length}件</strong>（本命S/AS <strong>${honmei}</strong>件）`
     + ` ・ 推定周遊 <strong>約${total}分</strong>（徒歩${walk}分＋滞在${stay}分×${sel.length}）`
     + ` ・ 総移動 約${km}km`;
 }
