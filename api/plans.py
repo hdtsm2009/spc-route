@@ -20,9 +20,12 @@ except Exception as e:  # noqa: BLE001
     _kv = None
     _IMPORT_ERR = str(e)
 
+import _auth
+
 
 def _diag():
     """秘密情報は含めず、設定状況のbooleanのみ返す診断用。"""
+    api_token_set = bool(os.environ.get("API_TOKEN", ""))
     return {
         "kv_import_ok": _kv is not None,
         "import_error": _IMPORT_ERR,
@@ -30,12 +33,18 @@ def _diag():
                         or os.environ.get("UPSTASH_REDIS_REST_URL")),
         "has_token": bool(os.environ.get("KV_REST_API_TOKEN")
                           or os.environ.get("UPSTASH_REDIS_REST_TOKEN")),
+        "api_token_set": api_token_set,
+        "warn_no_api_token": (not api_token_set
+                              and os.environ.get("VERCEL_ENV") == "production"),
     }
 
 
 class handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
+        if not _auth.check_token(self.headers):
+            self._json(401, _auth.AUTH_401)
+            return
         if _kv is None or not _kv.is_configured():
             self._json(200, {"configured": False, "plans": [], "diag": _diag()})
             return
@@ -51,7 +60,7 @@ class handler(BaseHTTPRequestHandler):
             self._json(200, {"configured": True, "plans": []})
             return
 
-        self._json(200, {"configured": True, "plans": plans})
+        self._json(200, {"configured": True, "plans": plans, "diag": _diag()})
 
     def _json(self, status: int, obj):
         encoded = json.dumps(obj, ensure_ascii=False).encode("utf-8")

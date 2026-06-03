@@ -70,6 +70,7 @@ if _DIR not in sys.path:
     sys.path.insert(0, _DIR)
 
 import generate_plan as G  # filter_candidates / get_score / _visit_pitch / resolve_origin 等
+import _auth
 
 try:
     import _kv
@@ -104,6 +105,9 @@ class handler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_POST(self):
+        if not _auth.check_token(self.headers):
+            self._json(401, _auth.AUTH_401)
+            return
         try:
             length = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(length) or b"{}")

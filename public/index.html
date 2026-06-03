@@ -945,7 +945,11 @@ async function loadPlanList(){
   loading.style.display = ''; table.style.display = 'none'; empty.style.display = 'none';
   try{
     const res  = await fetch('/api/plans', {cache:'no-store'});
+    if(res.status === 401){ loading.textContent = '🔒 認証が必要です（Vercel Authenticationを確認してください）'; return; }
     const data = await res.json();
+    if(data.diag && data.diag.warn_no_api_token){
+      console.warn('[security] API_TOKEN が本番環境で未設定です。Vercel Authentication またはAPI_TOKEN を設定してください。');
+    }
     const plans = data.plans || [];
     if(plans.length === 0){ loading.style.display='none'; empty.style.display=''; return; }
     body.innerHTML = plans.map(p => `

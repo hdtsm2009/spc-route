@@ -25,6 +25,7 @@ if _DIR not in sys.path:
     sys.path.insert(0, _DIR)
 
 import _kv
+import _auth
 
 HASH_KEY = "visits"
 
@@ -70,12 +71,18 @@ class handler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self):
+        if not _auth.check_token(self.headers):
+            self._json(401, _auth.AUTH_401)
+            return
         try:
             self._json(200, {"visits": _load_all()})
         except Exception as e:
             self._json(200, {"visits": {}, "warn": f"KV読込不可: {e}"})
 
     def do_POST(self):
+        if not _auth.check_token(self.headers):
+            self._json(401, _auth.AUTH_401)
+            return
         try:
             length = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(length) or b"{}")

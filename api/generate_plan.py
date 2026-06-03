@@ -30,6 +30,8 @@ import traceback
 import time
 import random
 import sys
+import html
+import secrets
 
 _DIR = os.path.dirname(os.path.abspath(__file__))
 # Vercel関数実行時、api/ が sys.path に無いため兄弟importが失敗する。明示追加。
@@ -40,6 +42,8 @@ try:
     import _kv  # type: ignore
 except Exception:  # noqa: BLE001 - 兄弟import失敗時もHTMLフォールバックで動かす
     _kv = None
+
+import _auth
 
 # ─── データ読み込み（コールド起動後はキャッシュ）────────────────────────────
 _STORES = None
@@ -53,6 +57,11 @@ def _load_data():
         with open(os.path.join(_DIR, "config.json"), encoding="utf-8") as f:
             _CONFIG = json.load(f)
     return _STORES, _CONFIG
+
+
+def _h(s) -> str:
+    """HTML属性・テキストノードへの埋め込み前に必ず通す。"""
+    return html.escape(str(s or ""))
 
 # ─── 位置計算 ─────────────────────────────────────────────────────────────────
 
@@ -90,6 +99,8 @@ def check_open(hours_str: str, ws: str, we: str) -> str:
     if any(kw in h for kw in ["定休", "閉店", "営業なし"]):
         return "要確認"
     wstart, wend = _t2min(ws), _t2min(we)
+    if wend <= wstart:  # 検索ウィンドウ自体が日跨ぎ（例 22:00〜02:00）
+        wend += 24 * 60
     # 「H:MM-H:MM」「H時-H時」等の営業区間をすべて抽出
     ranges = []
     for m in re.finditer(r"(\d{1,2})(?::|時)?(\d{2})?\s*[~〜～\-―ー]\s*(翌\s*日?)?\s*(\d{1,2})(?::|時)?(\d{2})?", h):
@@ -393,6 +404,14 @@ def build_selected_route(selected, origin, window_start, window_end,
         for e in entries:
             if e["store"].get("店舗ID") == "APPT":
                 e["is_appt"] = True
+    # window_end を超える店を除外（store_ids指定時は _fill_block を通らないため自前でトリム）
+    we = _t2min(window_end)
+    if we <= ws:  # ウィンドウが日跨ぎ（例 22:00〜02:00）
+        we += 24 * 60
+    trimmed = [e for e in entries if _t2min(e["time"]) <= we]
+    if len(trimmed) < len(entries):
+        elat, elng = (_coords(trimmed[-1]["store"]) if trimmed else (o_lat, o_lng))
+        entries = trimmed
     return_travel = (walk_minutes(haversine_m(elat, elng, o_lat, o_lng), speed)
                      if return_to_origin and ordered else 0)
     return entries, return_travel, entries, [], "free"
@@ -866,11 +885,14 @@ def _phone_cell(phone: str) -> str:
 
 def _detail_html(r: dict) -> str:
     hp = r.get("HP", "")
-    hp_cell = f'<a href="{hp}" target="_blank">{hp[:50]}</a>' if hp and hp.startswith("http") else hp
+    if hp and hp.startswith(("http://", "https://")):
+        hp_cell = f'<a href="{_h(hp)}" target="_blank">{_h(hp[:50])}</a>'
+    else:
+        hp_cell = _h(hp)
     sales_fields = [
-        ("評価", r.get("評価")), ("口コミ数", r.get("口コミ数")),
-        ("営業時間", r.get("営業時間")), ("予算", r.get("予算")),
-        ("最寄駅", r.get("最寄駅")), ("HP", hp_cell), ("SNS", r.get("SNS")),
+        ("評価", _h(r.get("評価"))), ("口コミ数", _h(r.get("口コミ数"))),
+        ("営業時間", _h(r.get("営業時間"))), ("予算", _h(r.get("予算"))),
+        ("最寄駅", _h(r.get("最寄駅"))), ("HP", hp_cell), ("SNS", _h(r.get("SNS"))),
     ]
     def tbl(fields):
         return "".join(
@@ -905,27 +927,29 @@ def _store_row_html(entry: dict, prev_addr: str, owner: str, section: str = "fre
     except (ValueError, TypeError):
         latlng = ""
     pitch = _visit_pitch(r)
-    pitch_html = f'<br><span class="pitch-chip">{pitch}</span>' if pitch else ""
+    pitch_html = f'<br><span class="pitch-chip">{_h(pitch)}</span>' if pitch else ""
     approx_html = ('<span class="approx-badge" title="番地が無いため地名（町名）の中心点。現地で要確認">概算位置(町名)</span>'
                    if "概算" in str(r.get("ジオコーディング精度", "")) else "")
     chain_html = '<span class="chain-badge">FC?</span>' if r.get("chain_flag") == "チェーン疑" else ""
+    rec_cmd_esc = _h(rec_cmd)
+    sr_tail = "…" if len(sr) > 60 else ""
     return f"""
-    <tr class="store-row" data-addr="{addr_esc}" data-latlng="{latlng}" data-section="{sec}" data-priority="{priority}">
+    <tr class="store-row" data-addr="{_h(addr)}" data-latlng="{latlng}" data-section="{sec}" data-priority="{priority}">
       <td>{entry['time']}</td>
       <td>🚶 徒歩{entry['travel_min']}分<br><small>{entry['dist_m']}m</small></td>
-      <td><a href="{ml}" target="_blank"><strong>{r['店名']}</strong></a>{chain_html}
-          <br><small class="addr">{addr}</small> {approx_html}
-          <br><small class="store-id">ID: {store_id}</small>{pitch_html}</td>
-      <td><span style="color:{rc};font-weight:bold">{rank}</span> {oi}
-          <br><small title="{sr.replace('"', "'")}">{score}点</small></td>
-      <td class="reason-cell"><small>{sr[:60]}{'…' if len(sr) > 60 else ''}</small></td>
-      <td><small>{genre[:18]}</small></td>
-      <td><small>{r.get('ソース', '')}</small></td>
+      <td><a href="{ml}" target="_blank"><strong>{_h(r['店名'])}</strong></a>{chain_html}
+          <br><small class="addr">{_h(addr)}</small> {approx_html}
+          <br><small class="store-id">ID: {_h(store_id)}</small>{pitch_html}</td>
+      <td><span style="color:{rc};font-weight:bold">{_h(rank)}</span> {oi}
+          <br><small title="{_h(sr)}">{_h(score)}点</small></td>
+      <td class="reason-cell"><small>{_h(sr[:60])}{sr_tail}</small></td>
+      <td><small>{_h(genre[:18])}</small></td>
+      <td><small>{_h(r.get('ソース', ''))}</small></td>
       <td>{_phone_cell(phone)}</td>
       <td><a href="{nl}" target="_blank">📍</a></td>
       <td>{_detail_html(r)}</td>
       <td class="memo-cell" contenteditable="true"></td>
-      <td><button class="rec-btn" onclick="copyCmd(this)" data-cmd="{rec_cmd}">📝記録</button>
+      <td><button class="rec-btn" onclick="copyCmd(this)" data-cmd="{rec_cmd_esc}">📝記録</button>
           <br><button class="exclude-btn" onclick="toggleExclude(this)">✕ 除外</button></td>
     </tr>"""
 
@@ -1095,6 +1119,9 @@ class handler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_POST(self):
+        if not _auth.check_token(self.headers):
+            self._respond(401, "application/json", '{"error":"認証が必要です"}')
+            return
         try:
             length = int(self.headers.get("Content-Length", 0))
             raw = self.rfile.read(length)
@@ -1254,7 +1281,7 @@ class handler(BaseHTTPRequestHandler):
         if _kv is None or not _kv.is_configured():
             return None
         try:
-            pid = f"{time.strftime('%Y%m%d_%H%M%S')}_{random.randint(1000, 9999)}"
+            pid = secrets.token_urlsafe(16)  # 128bit URL-safe random（推測耐性）
             # 本体スナップショット（30日保持）
             _kv.kv_set(f"plan:{pid}", html, ex=2_592_000)
             # 一覧メタ（新しい順、最新100件）
