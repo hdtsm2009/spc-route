@@ -614,7 +614,11 @@ async function recordVisit(sel){
     renderCandidates();
   }catch(e){
     sel.disabled = false;
-    alert('記録に失敗しました: ' + e.message);
+    const msg = document.createElement('span');
+    msg.textContent = '記録失敗: ' + e.message;
+    msg.style.cssText = 'color:#c0392b;font-size:11px;display:block;margin-top:2px';
+    card.appendChild(msg);
+    setTimeout(() => msg.remove(), 4000);
   }
 }
 function honmeiLabel(c){
