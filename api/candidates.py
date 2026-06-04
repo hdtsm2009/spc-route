@@ -105,7 +105,7 @@ class handler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_POST(self):
-        if not _auth.check_token(self.headers):
+        if not _auth.check_token_browser(self.headers):
             self._json(401, _auth.AUTH_401)
             return
         try:

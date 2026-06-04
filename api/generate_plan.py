@@ -1119,7 +1119,7 @@ class handler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_POST(self):
-        if not _auth.check_token(self.headers):
+        if not _auth.check_token_browser(self.headers):
             self._respond(401, "application/json", '{"error":"認証が必要です"}')
             return
         try:

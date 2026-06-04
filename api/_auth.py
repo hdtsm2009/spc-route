@@ -8,7 +8,7 @@ import os
 
 
 def check_token(headers) -> bool:
-    """Bearer トークン認証。
+    """Bearer トークン認証（書き込み・機密系エンドポイント用）。
 
     - API_TOKEN 設定あり       : Authorization: Bearer <token> が一致すれば許可
     - API_TOKEN 未設定 + production : fail-closed（401）
@@ -20,6 +20,16 @@ def check_token(headers) -> bool:
         return auth.startswith("Bearer ") and auth[7:] == token
     if os.environ.get("VERCEL_ENV") == "production":
         return False
+    return True
+
+
+def check_token_browser(headers) -> bool:
+    """読み取り系・ブラウザ向けエンドポイント用。
+
+    Vercel Authentication が有効になるまでの暫定として全通し。
+    candidates / generate_plan に使用。
+    visit POST / plans GET は check_token（厳格側）を使うこと。
+    """
     return True
 
 
